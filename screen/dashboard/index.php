@@ -134,7 +134,7 @@ $artikel_kesehatan = [
                         <div class="product-card">
                             <div class="product-badge">Terlaris</div>
                             <div class="product-image">
-                                <img src="../../assets/images/obat/default.jpg?php echo $obat['gambar'] ?: 'default.jpg'; ?>"
+                                <img src="../../assets/images/obat/default.png?php echo $obat['gambar'] ?: 'default.png'; ?>"
                                     alt="<?php echo $obat['nama_obat']; ?>">
                             </div>
                             <div class="product-info">
@@ -170,7 +170,7 @@ $artikel_kesehatan = [
                         <?php while ($dokter = mysqli_fetch_assoc($dokter_terbaik)): ?>
                         <div class="doctor-card">
                             <div class="doctor-image">
-                                <img src="../../assets/dokter/default_dokter.png?php echo $dokter['foto'] ?: 'default.jpg'; ?>"
+                                <img src="../../assets/dokter/default_dokter.png?php echo $dokter['foto'] ?: 'default.png'; ?>"
                                     alt="<?php echo $dokter['nama_dokter']; ?>">
                                 <div class="doctor-rating">
                                     <i class="fas fa-star"></i>

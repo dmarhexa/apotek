@@ -76,3 +76,29 @@ CREATE TABLE pengingat_obat (
     status ENUM('aktif', 'selesai') DEFAULT 'aktif',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Tabel pegawai (UNTUK ADMIN SAJA)
+CREATE TABLE pegawai (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    nama_lengkap VARCHAR(100) NOT NULL,
+    status ENUM('active', 'inactive') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP NULL
+);
+
+-- Insert admin pertama (password: admin123)
+-- Note: Password sudah di-hash untuk 'admin123'
+INSERT INTO pegawai (username, password, nama_lengkap) 
+VALUES ('admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Administrator Utama');
+
+-- Tabel users (UNTUK PELANGGAN)
+CREATE TABLE users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nama_lengkap VARCHAR(100) NOT NULL,
+  email VARCHAR(100) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  no_hp VARCHAR(20),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

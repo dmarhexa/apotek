@@ -107,7 +107,7 @@ function hapusObat($conn) {
     $query = "SELECT gambar FROM obat WHERE id_obat = $id_obat";
     $result = mysqli_query($conn, $query);
     if ($row = mysqli_fetch_assoc($result)) {
-        if ($row['gambar'] && $row['gambar'] != 'default.jpg' && file_exists('../../uploads/obat/' . $row['gambar'])) {
+        if ($row['gambar'] && $row['gambar'] != 'default.png' && file_exists('../../uploads/obat/' . $row['gambar'])) {
             unlink('../../uploads/obat/' . $row['gambar']);
         }
     }
@@ -133,7 +133,7 @@ function uploadGambar($type = 'obat', $conn) {
     
     // Jika tidak ada file yang diupload
     if (!isset($_FILES['gambar']) || $_FILES['gambar']['error'] === 4) {
-        return $type == 'obat' ? 'default.jpg' : 'default.png';
+        return $type == 'obat' ? 'default.png' : 'default.png';
     }
     
     $file_name = time() . '_' . uniqid() . '_' . basename($_FILES["gambar"]["name"]);
@@ -144,20 +144,20 @@ function uploadGambar($type = 'obat', $conn) {
     $check = getimagesize($_FILES["gambar"]["tmp_name"]);
     if ($check === false) {
         set_message('File bukan gambar.', 'error');
-        return $type == 'obat' ? 'default.jpg' : 'default.png';
+        return $type == 'obat' ? 'default.png' : 'default.png';
     }
     
     // Cek ukuran file (max 2MB)
     if ($_FILES["gambar"]["size"] > 2097152) {
         set_message('Ukuran gambar terlalu besar (max 2MB).', 'error');
-        return $type == 'obat' ? 'default.jpg' : 'default.png';
+        return $type == 'obat' ? 'default.png' : 'default.png';
     }
     
     // Format yang diizinkan
     $allowed_types = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     if (!in_array($imageFileType, $allowed_types)) {
         set_message('Hanya file JPG, JPEG, PNG, GIF, dan WebP yang diizinkan.', 'error');
-        return $type == 'obat' ? 'default.jpg' : 'default.png';
+        return $type == 'obat' ? 'default.png' : 'default.png';
     }
     
     // Upload file
@@ -165,7 +165,7 @@ function uploadGambar($type = 'obat', $conn) {
         return $file_name;
     } else {
         set_message('Terjadi kesalahan saat upload gambar.', 'error');
-        return $type == 'obat' ? 'default.jpg' : 'default.png';
+        return $type == 'obat' ? 'default.png' : 'default.png';
     }
 }
 
@@ -294,7 +294,7 @@ if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
                                 <div class="form-group">
                                     <label for="gambar"><i class="fas fa-image"></i> Gambar Obat</label>
                                     <input type="file" id="gambar" name="gambar" accept="image/*" class="file-input">
-                                    <?php if($edit_obat && $edit_obat['gambar'] && $edit_obat['gambar'] != 'default.jpg'): ?>
+                                    <?php if($edit_obat && $edit_obat['gambar'] && $edit_obat['gambar'] != 'default.png'): ?>
                                         <div class="current-image">
                                             <small>Gambar saat ini:</small>
                                             <img src="../../uploads/obat/<?php echo $edit_obat['gambar']; ?>" 
@@ -378,9 +378,9 @@ if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
                                         <tr>
                                             <td>
                                                 <div class="table-image">
-                                                    <img src="../../uploads/obat/<?php echo $obat['gambar'] ?: 'default.jpg'; ?>" 
+                                                    <img src="../../uploads/obat/<?php echo $obat['gambar'] ?: 'default.png'; ?>" 
                                                          alt="<?php echo htmlspecialchars($obat['nama_obat']); ?>"
-                                                         onerror="this.src='../../assets/images/obat/default.jpg'">
+                                                         onerror="this.src='../../assets/images/obat/default.png'">
                                                 </div>
                                             </td>
                                             <td>

@@ -413,9 +413,9 @@ function safeOutput($string)
                             $stock_status = $obat['stok'] == 0 ? 'Stok Habis' : ($obat['stok'] < 10 ? 'Stok Terbatas' : 'Tersedia');
 
                             // Path gambar
-                            $gambar_path = '../../uploads/obat/' . ($obat['gambar'] ?: 'default.jpg');
+                            $gambar_path = '../../uploads/obat/' . ($obat['gambar'] ?: 'default.png');
                             if (!file_exists($gambar_path) || !$obat['gambar']) {
-                                $gambar_path = '../../assets/images/obat/default.jpg';
+                                $gambar_path = '../../assets/images/obat/default.png';
                             }
 
                             // Escape semua data
@@ -429,7 +429,7 @@ function safeOutput($string)
                         <div class="product-card <?php echo $stock_class; ?>">
                             <div class="product-image">
                                 <img src="<?php echo $gambar_path; ?>" alt="<?php echo $obat_nama; ?>"
-                                    onerror="this.src='../../assets/images/obat/default.jpg'">
+                                    onerror="this.src='../../assets/images/obat/default.png'">
                                 <?php if ($userRole === 'admin'): ?>
                                 <div class="admin-product-actions">
                                     <a href="../../admin/obat/edit.php?id=<?php echo $obat['id_obat']; ?>"

@@ -127,7 +127,7 @@ function uploadGambar($type = 'dokter', $conn) {
     
     // Jika tidak ada file yang diupload
     if (!isset($_FILES['foto']) || $_FILES['foto']['error'] === 4) {
-        return $type == 'dokter' ? 'default.png' : 'default.jpg';
+        return $type == 'dokter' ? 'default.png' : 'default.png';
     }
     
     $file_name = time() . '_' . uniqid() . '_' . basename($_FILES["foto"]["name"]);
@@ -138,20 +138,20 @@ function uploadGambar($type = 'dokter', $conn) {
     $check = getimagesize($_FILES["foto"]["tmp_name"]);
     if ($check === false) {
         set_message('File bukan gambar.', 'error');
-        return $type == 'dokter' ? 'default.png' : 'default.jpg';
+        return $type == 'dokter' ? 'default.png' : 'default.png';
     }
     
     // Cek ukuran file (max 2MB)
     if ($_FILES["foto"]["size"] > 2097152) {
         set_message('Ukuran gambar terlalu besar (max 2MB).', 'error');
-        return $type == 'dokter' ? 'default.png' : 'default.jpg';
+        return $type == 'dokter' ? 'default.png' : 'default.png';
     }
     
     // Format yang diizinkan
     $allowed_types = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     if (!in_array($imageFileType, $allowed_types)) {
         set_message('Hanya file JPG, JPEG, PNG, GIF, dan WebP yang diizinkan.', 'error');
-        return $type == 'dokter' ? 'default.png' : 'default.jpg';
+        return $type == 'dokter' ? 'default.png' : 'default.png';
     }
     
     // Upload file
@@ -159,7 +159,7 @@ function uploadGambar($type = 'dokter', $conn) {
         return $file_name;
     } else {
         set_message('Terjadi kesalahan saat upload gambar.', 'error');
-        return $type == 'dokter' ? 'default.png' : 'default.jpg';
+        return $type == 'dokter' ? 'default.png' : 'default.png';
     }
 }
 
