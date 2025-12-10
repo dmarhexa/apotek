@@ -1,0 +1,80 @@
+=== CREATE TRANSAKSI DEBUG ===
+POST data: Array
+(
+    [status_pembayaran] => lunas
+    [product_id] => 18
+    [nama_pembeli] => babv
+    [quantity] => 1
+    [total_harga] => Rp 20.000
+    [metode_pembayaran] => transfer_bank
+    [alamat_pengiriman] => nbehvb13
+    [catatan] => ndfvn 
+)
+
+SESSION data: Array
+(
+)
+
+id_pengguna: null (guest)
+product_id: 18, quantity: 1
+Product found: alkohol, Price: 20000.00, Stock: 94
+Calculated: harga_satuan=20000.00, total_harga=20000, quantity=1
+Transaction SQL: INSERT INTO transaksi (
+                id_pengguna, 
+                nama_pembeli, 
+                total_harga, 
+                status_pembayaran, 
+                metode_pembayaran, 
+                alamat_pengiriman, 
+                catatan
+              ) VALUES (?, ?, ?, 'lunas', ?, ?, ?)
+Transaction created with ID: 17
+Detail SQL: INSERT INTO detail_transaksi (
+                      id_transaksi, 
+                      id_obat, 
+                      jumlah, 
+                      harga_satuan, 
+                      subtotal
+                    ) VALUES (?, ?, ?, ?, ?)
+Transaction ERROR: Table 'apotek_db.detail_transaksi' doesn't exist
+
+=== CREATE TRANSAKSI DEBUG ===
+POST data: Array
+(
+    [status_pembayaran] => lunas
+    [product_id] => 18
+    [nama_pembeli] => BWEFHBH
+    [quantity] => 6
+    [total_harga] => Rp 120.000
+    [metode_pembayaran] => transfer_bank
+    [alamat_pengiriman] => basefhj
+    [catatan] => fjibwefb
+)
+
+SESSION data: Array
+(
+)
+
+id_pengguna: null (guest)
+product_id: 18, quantity: 6
+Product found: alkohol, Price: 20000.00, Stock: 94
+Calculated: harga_satuan=20000.00, total_harga=120000, quantity=6
+Transaction SQL: INSERT INTO transaksi (
+                id_pengguna, 
+                nama_pembeli, 
+                total_harga, 
+                status_pembayaran, 
+                metode_pembayaran, 
+                alamat_pengiriman, 
+                catatan
+              ) VALUES (?, ?, ?, 'lunas', ?, ?, ?)
+Transaction created with ID: 18
+Detail SQL: INSERT INTO detail_transaksi (
+                      id_transaksi, 
+                      id_obat, 
+                      jumlah, 
+                      harga_satuan, 
+                      subtotal
+                    ) VALUES (?, ?, ?, ?, ?)
+Transaction ERROR: Table 'apotek_db.detail_transaksi' doesn't exist
+
