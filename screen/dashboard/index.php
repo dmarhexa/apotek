@@ -74,7 +74,7 @@ $artikel_kesehatan = [
                     <div class="welcome-text">
                         <h1>Selamat Datang di Apotek<span>Sehat</span></h1>
                         <p>Solusi kesehatan keluarga Anda. Temukan obat dan konsultasi dengan dokter terbaik.</p>
-                        <a href="../obat/" class="btn-explore">
+                        <a href="<?php echo isset($_SESSION['user_id']) ? '../obat/' : '../../auth/user_login.php'; ?>" class="btn-explore">
                             <i class="fas fa-shopping-bag"></i>
                             Belanja Sekarang
                         </a>

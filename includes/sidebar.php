@@ -11,6 +11,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Cek login status
 $isLoggedIn = isset($_SESSION['pegawai_id']) && !empty($_SESSION['pegawai_id']);
+$isUserLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']); // Tambahkan cek user login
 $currentUser = null;
 $userRole = 'guest';
 
@@ -166,7 +167,7 @@ $darkColor = darkenColor($currentRoleConfig['color'], 30);
                     </div>
                 </a>
 
-                <a href="#" class="nav-item">
+                <!-- <a href="#" class="nav-item">
                     <div class="nav-icon">
                         <i class="fas fa-prescription-bottle"></i>
                     </div>
@@ -174,7 +175,7 @@ $darkColor = darkenColor($currentRoleConfig['color'], 30);
                     <div class="nav-indicator">
                         <i class="fas fa-chevron-right"></i>
                     </div>
-                </a>
+                </a> -->
             </div>
 
             <div class="nav-section">
@@ -192,7 +193,7 @@ $darkColor = darkenColor($currentRoleConfig['color'], 30);
                     </div>
                 </a>
 
-                <a href="<?php echo $base_url; ?>/screen/dokter/"
+                <!-- <a href="<?php echo $base_url; ?>/screen/dokter/"
                     class="nav-item <?php echo ($current_dir == 'dokter') ? 'active' : ''; ?>">
                     <div class="nav-icon">
                         <i class="fas fa-user-md"></i>
@@ -201,31 +202,45 @@ $darkColor = darkenColor($currentRoleConfig['color'], 30);
                     <div class="nav-indicator">
                         <i class="fas fa-chevron-right"></i>
                     </div>
-                </a>
+                </a> -->
             </div>
 
             <div class="nav-section">
+                 <?php if ($isUserLoggedIn): ?>
                 <p class="nav-title">
                     <i class="fas fa-shopping-cart"></i> TRANSAKSI
                 </p>
-                <a href="<?php echo $base_url; ?>/screen/transaksi/"
-                    class="nav-item <?php echo ($current_dir == 'transaksi') ? 'active' : ''; ?>">
+               
+                <a href="<?php echo $base_url; ?>/screen/riwayat/"
+                    class="nav-item <?php echo ($current_dir == 'riwayat') ? 'active' : ''; ?>">
                     <div class="nav-icon">
-                        <i class="fas fa-shopping-cart"></i>
+                        <i class="fas fa-history"></i>
                     </div>
-                    <span class="nav-text">Riwayat Transaksi</span>
+                    <span class="nav-text">Riwayat Belanja</span>
                     <div class="nav-indicator">
                         <i class="fas fa-chevron-right"></i>
                     </div>
                 </a>
-
+                <?php endif; ?>
             </div>
 
             <div class="nav-section">
                 <p class="nav-title">
                     <i class="fas fa-calendar-alt"></i> LAINNYA
                 </p>
-                <a href="#" class="nav-item">
+                <?php if ($isUserLoggedIn): ?>
+                <a href="<?php echo $base_url; ?>/screen/pengingat/"
+                    class="nav-item <?php echo ($current_dir == 'pengingat') ? 'active' : ''; ?>">
+                    <div class="nav-icon">
+                        <i class="fas fa-bell"></i>
+                    </div>
+                    <span class="nav-text">Pengingat Obat</span>
+                    <div class="nav-indicator">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </a>
+                <?php endif; ?>
+                <!-- <a href="#" class="nav-item">
                     <div class="nav-icon">
                         <i class="fas fa-calendar-check"></i>
                     </div>
@@ -233,7 +248,7 @@ $darkColor = darkenColor($currentRoleConfig['color'], 30);
                     <div class="nav-indicator">
                         <i class="fas fa-chevron-right"></i>
                     </div>
-                </a>
+                </a> -->
 
                 <a href="<?php echo $base_url; ?>/screen/rating/"
                     class="nav-item <?php echo ($current_dir == 'rating') ? 'active' : ''; ?>">
@@ -246,7 +261,7 @@ $darkColor = darkenColor($currentRoleConfig['color'], 30);
                     </div>
                 </a>
 
-                <a href="#" class="nav-item">
+                <!-- <a href="#" class="nav-item">
                     <div class="nav-icon">
                         <i class="fas fa-question-circle"></i>
                     </div>
@@ -254,13 +269,13 @@ $darkColor = darkenColor($currentRoleConfig['color'], 30);
                     <div class="nav-indicator">
                         <i class="fas fa-chevron-right"></i>
                     </div>
-                </a>
+                </a> -->
             </div>
         </nav>
 
         <!-- Login Button (Hanya untuk guest atau user) -->
         <?php 
-        $isUserLoggedIn = isset($_SESSION['user_id']);
+        // $isUserLoggedIn sudah didefinisikan di atas
         if (!$isLoggedIn): 
         ?>
         <div class="guest-section">

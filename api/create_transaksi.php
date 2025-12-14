@@ -32,8 +32,15 @@ unset($_POST['total_harga']);
 
 // Get user_id from session (jika login)
 $id_pengguna = null;
+$tipe_pengguna = 'guest'; // Default
+
 if (isset($_SESSION['pegawai_id'])) {
     $id_pengguna = $_SESSION['pegawai_id'];
+    $tipe_pengguna = 'pegawai';
+} elseif (isset($_SESSION['user_id'])) {
+    // Support untuk customer login
+    $id_pengguna = $_SESSION['user_id'];
+    $tipe_pengguna = 'user';
 }
 
 $debug_log[] = "id_pengguna: " . ($id_pengguna ? $id_pengguna : 'null (guest)');
