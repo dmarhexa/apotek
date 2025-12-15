@@ -37,7 +37,6 @@ $itemsResult = $stmt->get_result();
 $items = [];
 
 while ($item = $itemsResult->fetch_assoc()) {
-    // Format item sesuai dengan yang diharapkan JavaScript
     $items[] = [
         'nama_obat' => $item['nama_obat'],
         'jumlah' => $item['jumlah'],

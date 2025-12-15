@@ -1,27 +1,26 @@
 <?php
 // apotek/screen/dashboard/index.php
-require_once '../../config.php'; // Kembali 2 level ke config.php
+require_once '../../config.php';
 
 // Query untuk data dashboard
 $total_obat = mysqli_query($conn, "SELECT COUNT(*) as total FROM obat");
 $total_obat = mysqli_fetch_assoc($total_obat)['total'];
 
-// Dokter terbaik
+// Dokter terbaik (ambil 4 dokter)
 $dokter_terbaik = mysqli_query($conn, "
     SELECT d.*, 
-           (SELECT AVG(bintang) FROM rating WHERE id_dokter = d.id_dokter) as rating_avg
+           COALESCE((SELECT AVG(bintang) FROM rating WHERE id_dokter = d.id_dokter), 4.5) as rating_avg
     FROM dokter d 
-    ORDER BY rating_avg DESC 
-    LIMIT 3
+    ORDER BY rating_avg DESC, d.nama_dokter ASC
+    LIMIT 4
 ");
 
-// Obat terlaris
+// Obat terlaris (ambil 6 obat)
 $obat_terlaris = mysqli_query($conn, "
-    SELECT o.*, SUM(dt.jumlah) as total_terjual
+    SELECT o.*, COALESCE(SUM(dt.jumlah), 0) as total_terjual
     FROM obat o
     LEFT JOIN transaksi_detail dt ON o.id_obat = dt.id_obat
-    LEFT JOIN transaksi t ON dt.id_transaksi = t.id_transaksi
-    WHERE t.status_pembayaran = 'lunas'
+    LEFT JOIN transaksi t ON dt.id_transaksi = t.id_transaksi AND t.status_pembayaran = 'lunas'
     GROUP BY o.id_obat
     ORDER BY total_terjual DESC 
     LIMIT 6
@@ -40,13 +39,6 @@ $kategori_obat = mysqli_query($conn, "
     FROM obat 
     GROUP BY kategori
 ");
-
-// Artikel kesehatan
-$artikel_kesehatan = [
-    ['judul' => 'Cara Menjaga Daya Tahan Tubuh di Musim Hujan', 'gambar' => 'artikel1.jpg', 'kategori' => 'Tips Sehat'],
-    ['judul' => 'Pentingnya Minum Air Putih yang Cukup', 'gambar' => 'artikel2.jpg', 'kategori' => 'Hidup Sehat'],
-    ['judul' => 'Mengenal Gejala Flu dan Pencegahannya', 'gambar' => 'artikel3.jpg', 'kategori' => 'Penyakit Umum'],
-];
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -57,15 +49,13 @@ $artikel_kesehatan = [
     <title>Beranda - Apotek Sehat</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@10/swiper-bundle.min.css">
 </head>
 
 <body>
     <div class="container">
         <?php include '../../includes/sidebar.php'; ?>
-        <!-- Kembali 2 level -->
 
         <main class="main-content">
             <!-- Header dengan Welcome Banner -->
@@ -80,8 +70,7 @@ $artikel_kesehatan = [
                         </a>
                     </div>
                     <div class="welcome-image">
-                        <img src="<?php echo $base_url; ?>/assets/logo/logo_apotek.png" alt="Apotek Sehat"
-                            style="width: 150px; height: auto; border-radius: 15px; object-fit: cover;">
+                        <img src="<?php echo $base_url; ?>/assets/logo/logo_apotek.png" alt="Apotek Sehat" style="width: 150px; height: auto; border-radius: 15px; object-fit: cover;">
                     </div>
                 </div>
             </header>
@@ -96,20 +85,34 @@ $artikel_kesehatan = [
                         Layanan Unggulan
                     </h2>
                     <div class="features-grid">
-                        <div class="feature-card">
+                        <!-- Konsultasi Dokter -->
+                        <a href="../konsultasi/" class="feature-card feature-card-link">
                             <div class="feature-icon green">
                                 <i class="fas fa-user-md"></i>
                             </div>
                             <h3>Konsultasi Dokter</h3>
                             <p>Online 24/7</p>
-                        </div>
-                        <div class="feature-card">
+                        </a>
+                        
+                        <!-- Obat Lengkap -->
+                        <a href="../obat/" class="feature-card feature-card-link">
                             <div class="feature-icon orange">
                                 <i class="fas fa-pills"></i>
                             </div>
                             <h3>Obat Lengkap</h3>
                             <p>1000+ jenis obat</p>
-                        </div>
+                        </a>
+                        
+                        <!-- Pengingat Obat -->
+                        <a href="../pengingat/" class="feature-card feature-card-link">
+                            <div class="feature-icon blue">
+                                <i class="fas fa-bell"></i>
+                            </div>
+                            <h3>Pengingat Obat</h3>
+                            <p>Jadwal minum obat</p>
+                        </a>
+                        
+                        <!-- 24 Jam -->
                         <div class="feature-card">
                             <div class="feature-icon purple">
                                 <i class="fas fa-clock"></i>
@@ -130,26 +133,29 @@ $artikel_kesehatan = [
                         <a href="../obat/" class="view-all">Lihat Semua <i class="fas fa-arrow-right"></i></a>
                     </div>
                     <div class="products-grid">
-                        <?php while ($obat = mysqli_fetch_assoc($obat_terlaris)): ?>
+                        <?php while ($obat = mysqli_fetch_assoc($obat_terlaris)): 
+                            // Tentukan path gambar
+                            $gambar_obat = !empty($obat['gambar']) && file_exists("../../assets/images/obat/{$obat['gambar']}") 
+                                ? "../../assets/images/obat/{$obat['gambar']}" 
+                                : "../../assets/images/obat/default.png";
+                        ?>
                         <div class="product-card">
                             <div class="product-badge">Terlaris</div>
                             <div class="product-image">
-                                <img src="../../assets/images/obat/default.png?php echo $obat['gambar'] ?: 'default.png'; ?>"
-                                    alt="<?php echo $obat['nama_obat']; ?>">
+                                <img src="<?php echo $gambar_obat; ?>" alt="<?php echo htmlspecialchars($obat['nama_obat']); ?>">
                             </div>
                             <div class="product-info">
-                                <span class="product-category"><?php echo $obat['kategori']; ?></span>
+                                <span class="product-category"><?php echo htmlspecialchars($obat['kategori']); ?></span>
                                 <h3 class="product-title"><?php echo htmlspecialchars($obat['nama_obat']); ?></h3>
-                                <p class="product-desc"><?php echo substr($obat['deskripsi'], 0, 60) . '...'; ?></p>
+                                <p class="product-desc"><?php echo substr(htmlspecialchars($obat['deskripsi']), 0, 60) . '...'; ?></p>
                                 <div class="product-footer">
                                     <div class="product-price">
-                                        <span class="price">Rp
-                                            <?php echo number_format($obat['harga'], 0, ',', '.'); ?></span>
+                                        <span class="price">Rp <?php echo number_format($obat['harga'], 0, ',', '.'); ?></span>
                                         <span class="stock">Stok: <?php echo $obat['stok']; ?></span>
                                     </div>
-                                    <button class="btn-add-cart" data-id="<?php echo $obat['id_obat']; ?>">
-                                        <i class="fas fa-cart-plus"></i>
-                                    </button>
+                                    <a href="../obat/detail.php?id=<?php echo $obat['id_obat']; ?>" class="btn-buy-now">
+                                        Beli Sekarang
+                                    </a>
                                 </div>
                             </div>
                         </div>
@@ -167,26 +173,30 @@ $artikel_kesehatan = [
                         <a href="../dokter/" class="view-all">Lihat Semua <i class="fas fa-arrow-right"></i></a>
                     </div>
                     <div class="doctors-grid">
-                        <?php while ($dokter = mysqli_fetch_assoc($dokter_terbaik)): ?>
+                        <?php while ($dokter = mysqli_fetch_assoc($dokter_terbaik)): 
+                            // Tentukan path gambar dokter
+                            $gambar_dokter = !empty($dokter['foto']) && file_exists("../../assets/dokter/{$dokter['foto']}") 
+                                ? "../../assets/dokter/{$dokter['foto']}" 
+                                : "../../assets/dokter/default_dokter.png";
+                        ?>
                         <div class="doctor-card">
                             <div class="doctor-image">
-                                <img src="../../assets/dokter/default_dokter.png?php echo $dokter['foto'] ?: 'default.png'; ?>"
-                                    alt="<?php echo $dokter['nama_dokter']; ?>">
+                                <img src="<?php echo $gambar_dokter; ?>" alt="<?php echo htmlspecialchars($dokter['nama_dokter']); ?>">
                                 <div class="doctor-rating">
                                     <i class="fas fa-star"></i>
                                     <span><?php echo number_format($dokter['rating_avg'] ?? 4.5, 1); ?></span>
                                 </div>
                             </div>
                             <div class="doctor-info">
-                                <h3><?php echo $dokter['nama_dokter']; ?></h3>
-                                <p class="doctor-specialty"><?php echo $dokter['spesialisasi']; ?></p>
+                                <h3><?php echo htmlspecialchars($dokter['nama_dokter']); ?></h3>
+                                <p class="doctor-specialty"><?php echo htmlspecialchars($dokter['spesialisasi']); ?></p>
                                 <p class="doctor-experience">
                                     <i class="fas fa-briefcase"></i>
-                                    <?php echo $dokter['pengalaman']; ?> pengalaman
+                                    <?php echo htmlspecialchars($dokter['pengalaman']); ?> pengalaman
                                 </p>
                                 <div class="doctor-schedule">
                                     <i class="fas fa-calendar-alt"></i>
-                                    <span><?php echo substr($dokter['jadwal_praktek'], 0, 20); ?>...</span>
+                                    <span><?php echo substr(htmlspecialchars($dokter['jadwal_praktek']), 0, 20); ?>...</span>
                                 </div>
                                 <div class="doctor-footer">
                                     <span class="consultation-fee">
@@ -210,8 +220,7 @@ $artikel_kesehatan = [
                     </h2>
                     <div class="categories-grid">
                         <?php while ($kategori = mysqli_fetch_assoc($kategori_obat)): ?>
-                        <a href="../obat/?kategori=<?php echo urlencode($kategori['kategori']); ?>"
-                            class="category-card">
+                        <a href="../obat/?kategori=<?php echo urlencode($kategori['kategori']); ?>" class="category-card">
                             <div class="category-icon">
                                 <?php
                                     $icons = [
@@ -219,30 +228,23 @@ $artikel_kesehatan = [
                                         'analgesik' => 'fa-head-side-virus',
                                         'vitamin' => 'fa-capsules',
                                         'topikal' => 'fa-spray-can',
-                                        'cough' => 'fa-lungs-virus'
+                                        'cough' => 'fa-lungs-virus',
+                                        'antihistamin' => 'fa-allergies',
+                                        'gastrointestinal' => 'fa-stomach',
+                                        'jantung' => 'fa-heartbeat',
+                                        'psikotropika' => 'fa-brain',
+                                        'hormon' => 'fa-flask'
                                     ];
                                     $icon = $icons[strtolower($kategori['kategori'])] ?? 'fa-pills';
                                     ?>
                                 <i class="fas <?php echo $icon; ?>"></i>
                             </div>
-                            <h3><?php echo $kategori['kategori']; ?></h3>
+                            <h3><?php echo htmlspecialchars($kategori['kategori']); ?></h3>
                             <p><?php echo $kategori['jumlah']; ?> jenis obat</p>
                         </a>
                         <?php endwhile; ?>
                     </div>
                 </section>
-
-                <!-- Promo Banner -->
-                <!-- <div class="promo-banner">
-                    <div class="promo-content">
-                        <h2>Diskon 30% untuk Pembelian Pertama!</h2>
-                        <p>Gunakan kode: <strong>APOTEK30</strong> untuk mendapatkan diskon khusus.</p>
-                        <a href="../obat/" class="btn-promo">Klaim Sekarang</a>
-                    </div>
-                    <div class="promo-image">
-                        <img src="https://cdn.pixabay.com/photo/2017/08/30/17/25/medicine-2698576_1280.png" alt="Promo">
-                    </div>
-                </div> -->
             </div>
         </main>
     </div>
