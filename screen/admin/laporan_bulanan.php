@@ -312,7 +312,7 @@ $result_feedback = mysqli_query($conn, $query_feedback);
             box-shadow: none;
             border: 1px solid #ddd;
             display: flex; /* Keep internal flex */
-            align-items: center;
+            align-items: center; 
         }
         .compact-mode .stat-icon {
             width: 30px;
