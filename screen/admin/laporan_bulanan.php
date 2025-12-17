@@ -4,7 +4,7 @@ require_once '../../config.php';
 require_once '../../includes/auth.php';
 
 // Cek login admin
-if (!isset($_SESSION['pegawai_id']) && !isset($_SESSION['user_role'])) {
+if (!isset($_SESSION['pegawai_id'])) {
     header("Location: " . $base_url . "/auth/login.php");
     exit();
 }
@@ -12,6 +12,10 @@ if (!isset($_SESSION['pegawai_id']) && !isset($_SESSION['user_role'])) {
 // Set default month/year
 $month = isset($_GET['bulan']) ? (int)$_GET['bulan'] : date('m');
 $year = isset($_GET['tahun']) ? (int)$_GET['tahun'] : date('Y');
+
+// Validasi
+$month = max(1, min(12, $month));
+$year = max(2020, min(date('Y'), $year));
 
 // Array nama bulan
 $bulan_indo = [
@@ -22,76 +26,104 @@ $bulan_indo = [
 // 1. STATISTIK PENJUALAN
 $revenue = 0;
 $total_transaksi = 0;
+$avg_transaksi = 0;
+
+// Deteksi kolom tanggal
+$date_col = 'tanggal_transaksi';
+$sql_check = "SHOW COLUMNS FROM transaksi";
+$check = mysqli_query($conn, $sql_check);
+$columns = [];
+if ($check) {
+    while($row = mysqli_fetch_assoc($check)) {
+        $columns[] = $row['Field'];
+    }
+    
+    if (in_array('tanggal_transaksi', $columns)) {
+        $date_col = 'tanggal_transaksi';
+    } elseif (in_array('created_at', $columns)) {
+        $date_col = 'created_at';
+    }
+}
+
+// Query Total Pendapatan Bulan Ini
+$query_revenue = "SELECT COALESCE(SUM(total_harga), 0) as total, COUNT(*) as jumlah 
+                  FROM transaksi 
+                  WHERE MONTH($date_col) = ? AND YEAR($date_col) = ?";
+                  
+$stmt = mysqli_prepare($conn, $query_revenue);
+if ($stmt) {
+    mysqli_stmt_bind_param($stmt, "ii", $month, $year);
+    mysqli_stmt_execute($stmt);
+    $result_revenue = mysqli_stmt_get_result($stmt);
+    
+    if ($result_revenue && $row = mysqli_fetch_assoc($result_revenue)) {
+        $revenue = $row['total'] ?? 0;
+        $total_transaksi = $row['jumlah'] ?? 0;
+        $avg_transaksi = $total_transaksi > 0 ? $revenue / $total_transaksi : 0;
+    }
+    mysqli_stmt_close($stmt);
+}
+
+// GRAFIK TREND LINE 30 HARI - Data untuk chart
 $chart_labels = [];
 $chart_data = [];
 
-// Query Total Pendapatan Bulan Ini
-// Query Total Pendapatan Bulan Ini
-$date_col = 'created_at'; // Default
-$sql_check = "SHOW COLUMNS FROM transaksi LIKE 'created_at'";
-$check = @mysqli_query($conn, $sql_check);
-if ($check && mysqli_num_rows($check) == 0) {
-    // Jika tidak ada created_at, cek tanggal_transaksi
-    $sql_check2 = "SHOW COLUMNS FROM transaksi LIKE 'tanggal_transaksi'";
-    $check2 = @mysqli_query($conn, $sql_check2);
-    if ($check2 && mysqli_num_rows($check2) > 0) {
-        $date_col = 'tanggal_transaksi';
-    }
-}
-
-$query_revenue = "SELECT SUM(total_harga) as total, COUNT(*) as jumlah 
-                  FROM transaksi 
-                  WHERE MONTH($date_col) = '$month' AND YEAR($date_col) = '$year'";
-
-$result_revenue = @mysqli_query($conn, $query_revenue);
-if ($result_revenue) {
-    $row = mysqli_fetch_assoc($result_revenue);
-    $revenue = $row['total'] ?? 0;
-    $total_transaksi = $row['jumlah'] ?? 0;
-}
-
-// Data untuk Grafik Bulanan (Trend setahun)
-$sql_chart = "SELECT MONTH($date_col) as bulan, SUM(total_harga) as total 
-              FROM transaksi 
-              WHERE YEAR($date_col) = '$year'
-              GROUP BY MONTH($date_col)";
-$result_chart = @mysqli_query($conn, $sql_chart);
-
-// Init 12 bulan
-$chart_labels = array_values($bulan_indo); // Jan - Des
-$chart_data = array_fill(0, 12, 0); // Index 0-11
-
-if ($result_chart) {
-    while ($row = mysqli_fetch_assoc($result_chart)) {
-        $m = (int)$row['bulan']; // 1-12
-        if ($m >= 1 && $m <= 12) {
-            $chart_data[$m - 1] = $row['total'];
+for ($i = 29; $i >= 0; $i--) {
+    $date = date('Y-m-d', strtotime("-$i days"));
+    $chart_labels[] = date('d M', strtotime($date));
+    
+    $query = "SELECT COUNT(*) as count FROM transaksi WHERE DATE($date_col) = ?";
+    $day_stmt = mysqli_prepare($conn, $query);
+    if ($day_stmt) {
+        mysqli_stmt_bind_param($day_stmt, "s", $date);
+        mysqli_stmt_execute($day_stmt);
+        $result = mysqli_stmt_get_result($day_stmt);
+        
+        if ($result && $data = mysqli_fetch_assoc($result)) {
+            $chart_data[] = $data['count'] ?? 0;
+        } else {
+            $chart_data[] = 0;
         }
+        mysqli_stmt_close($day_stmt);
+    } else {
+        $chart_data[] = 0;
     }
 }
-$chart_data_values = array_values($chart_data);
 
-// 2. PRODUK TERLARIS (New Feature)
-// Join transaksi -> transaksi_detail -> obat
-$query_best_selling = "SELECT o.nama_obat, o.kategori, SUM(td.jumlah) as total_terjual, SUM(td.subtotal) as total_pendapatan
-                       FROM transaksi_detail td
-                       JOIN transaksi t ON td.id_transaksi = t.id_transaksi
-                       JOIN obat o ON td.id_obat = o.id_obat
-                       WHERE MONTH(t.$date_col) = '$month' AND YEAR(t.$date_col) = '$year'
-                       GROUP BY td.id_obat
-                       ORDER BY total_terjual DESC
-                       LIMIT 5";
+// 2. PRODUK TERLARIS
+$query_best_selling = "SELECT 
+    o.nama_obat, 
+    o.kategori, 
+    COALESCE(SUM(td.jumlah), 0) as total_terjual, 
+    COALESCE(SUM(td.subtotal), 0) as total_pendapatan
+    FROM obat o
+    LEFT JOIN transaksi_detail td ON o.id_obat = td.id_obat
+    LEFT JOIN transaksi t ON td.id_transaksi = t.id_transaksi 
+        AND MONTH(t.$date_col) = ? AND YEAR(t.$date_col) = ?
+    GROUP BY o.id_obat
+    ORDER BY total_terjual DESC
+    LIMIT 5";
 
-$result_best_selling = @mysqli_query($conn, $query_best_selling);
+$stmt_best = mysqli_prepare($conn, $query_best_selling);
+$result_best_selling = null;
+if ($stmt_best) {
+    mysqli_stmt_bind_param($stmt_best, "ii", $month, $year);
+    mysqli_stmt_execute($stmt_best);
+    $result_best_selling = mysqli_stmt_get_result($stmt_best);
+}
 
 // 3. STOK MENIPIS
-$query_stok = "SELECT nama_obat, stok, harga FROM obat WHERE stok <= 10 ORDER BY stok ASC LIMIT 5";
+$query_stok = "SELECT nama_obat, stok, harga, kategori FROM obat WHERE stok <= 10 ORDER BY stok ASC LIMIT 5";
 $result_stok = mysqli_query($conn, $query_stok);
 
 // 4. FEEDBACK PENGGUNA
 $query_feedback = "SELECT nama_user, bintang, komentar, tanggal_rating FROM rating ORDER BY tanggal_rating DESC LIMIT 5";
 $result_feedback = mysqli_query($conn, $query_feedback);
 
+// Total obat hampir habis untuk notifikasi
+$query_stok_kritis = "SELECT COUNT(*) as total FROM obat WHERE stok <= 10";
+$result_kritis = mysqli_query($conn, $query_stok_kritis);
+$stok_kritis = $result_kritis ? mysqli_fetch_assoc($result_kritis)['total'] : 0;
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -105,480 +137,1123 @@ $result_feedback = mysqli_query($conn, $query_feedback);
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 20px;
+        /* ==============================
+           RESET DAN BASE STYLES
+           ============================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f9fafb;
+            color: #333;
+            line-height: 1.5;
+        }
+        
+        /* ==============================
+           SIDEBAR STYLING
+           ============================== */
+        .admin-sidebar {
+            width: 250px;
+            background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%);
+            color: white;
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        
+        /* ==============================
+           MAIN CONTENT AREA (BROWSER)
+           ============================== */
+        .main-content {
+            margin-left: 250px;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        /* ==============================
+        WEB HEADER (hanya untuk browser)
+        ============================== */
+        .web-header {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
             margin-bottom: 30px;
         }
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+
+        .web-header .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .web-header .header-left h1 {
+            font-size: 1.8rem;
+            color: #1f2937;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .web-header .header-left p {
+            color: #6b7280;
+            font-size: 0.95rem;
+            margin: 0;
+        }
+
+        .web-header .header-right {
             display: flex;
             align-items: center;
             gap: 15px;
-            border-left: 4px solid #10b981;
         }
+
+        /* ==============================
+           FILTER BAR (hanya untuk browser)
+           ============================== */
+        .filter-bar {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .filter-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .form-control {
+            padding: 10px 15px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            color: #374151;
+            background: white;
+            min-width: 140px;
+            transition: all 0.2s;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: #10b981;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+        }
+        
+        .btn-filter {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        
+        .btn-filter:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
+        }
+        
+        /* ==============================
+           STATS CARDS (BROWSER)
+           ============================== */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border-left: 4px solid;
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+        }
+        
+        .stat-card:nth-child(1) { border-left-color: #10b981; }
+        .stat-card:nth-child(2) { border-left-color: #3b82f6; }
+        .stat-card:nth-child(3) { border-left-color: #8b5cf6; }
+        
         .stat-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 10px;
-            background: #f0fdf4;
-            color: #10b981;
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 1.5rem;
         }
-        .stat-info h3 { margin: 0; font-size: 1.5rem; color: #1f2937; }
-        .stat-info p { margin: 0; color: #6b7280; font-size: 0.9rem; }
         
-        .charts-section {
+        .stat-card:nth-child(1) .stat-icon {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #10b981;
+        }
+        
+        .stat-card:nth-child(2) .stat-icon {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            color: #3b82f6;
+        }
+        
+        .stat-card:nth-child(3) .stat-icon {
+            background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+            color: #8b5cf6;
+        }
+        
+        .stat-info h3 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 5px;
+        }
+        
+        .stat-info p {
+            font-size: 0.9rem;
+            color: #6b7280;
+            margin: 0;
+        }
+        
+        /* ==============================
+           CHART SECTION (BROWSER)
+           ============================== */
+        .chart-container {
             background: white;
-            padding: 20px;
+            padding: 25px;
             border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
             margin-bottom: 30px;
         }
-
+        
+        .chart-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f3f4f6;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .chart-title i {
+            color: #10b981;
+        }
+        
+        .chart-wrapper {
+            height: 300px;
+            position: relative;
+        }
+        
+        /* ==============================
+           REPORT GRID (BROWSER)
+           ============================== */
         .report-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            gap: 25px;
             margin-bottom: 30px;
         }
         
-        @media (max-width: 900px) {
-            .report-grid { grid-template-columns: 1fr; }
+        @media (max-width: 1100px) {
+            .report-grid {
+                grid-template-columns: 1fr;
+            }
         }
-
+        
+        /* ==============================
+           REPORT SECTIONS (BROWSER)
+           ============================== */
         .report-section {
             background: white;
-            padding: 20px;
+            padding: 25px;
             border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            height: 100%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         }
-        .report-header {
+        
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f3f4f6;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .section-title i {
+            font-size: 1.1rem;
+        }
+        
+        /* ==============================
+           TABLES (BROWSER)
+           ============================== */
+        .table-report {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        
+        .table-report thead {
+            background: #f9fafb;
+        }
+        
+        .table-report th {
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #374151;
+            border-bottom: 2px solid #e5e7eb;
+            font-size: 0.9rem;
+        }
+        
+        .table-report td {
+            padding: 15px 12px;
+            border-bottom: 1px solid #f3f4f6;
+            color: #4b5563;
+            font-size: 0.9rem;
+        }
+        
+        .table-report tbody tr:hover {
+            background: #f9fafb;
+        }
+        
+        .table-report tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        /* ==============================
+           BADGES (BROWSER)
+           ============================== */
+        .badge {
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+        
+        .badge-danger {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        
+        .badge-warning {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            color: #92400e;
+            border: 1px solid #fcd34d;
+        }
+        
+        /* ==============================
+           FEEDBACK CARDS (BROWSER)
+           ============================== */
+        .feedback-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+        
+        .feedback-card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .feedback-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        
+        .feedback-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 15px;
-            border-bottom: 1px solid #f3f4f6;
-            padding-bottom: 10px;
         }
-        .stock-badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            font-weight: 600;
-        }
-        .stock-critical { background: #fef2f2; color: #ef4444; }
-        .stock-warning { background: #fffbeb; color: #f59e0b; }
-
-        .filter-bar {
-            background: white;
-            padding: 15px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-        .filter-form { display: flex; gap: 10px; }
         
-        /* Simple Download Button Style */
-        .btn-download-wrapper {
-            position: relative;
+        .feedback-user {
+            font-weight: 600;
+            font-size: 1rem;
+            color: #1f2937;
         }
+        
+        .feedback-stars {
+            color: #f59e0b;
+            font-size: 0.9rem;
+        }
+        
+        .feedback-comment {
+            font-size: 0.95rem;
+            color: #4b5563;
+            font-style: italic;
+            line-height: 1.6;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #fafafa;
+            border-radius: 8px;
+            border-left: 4px solid #e5e7eb;
+        }
+        
+        .feedback-date {
+            font-size: 0.85rem;
+            color: #9ca3af;
+            text-align: right;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 5px;
+        }
+        
+        /* ==============================
+           EMPTY STATE
+           ============================== */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #9ca3af;
+        }
+        
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            color: #d1d5db;
+            display: block;
+        }
+        
+        .empty-state p {
+            font-size: 1rem;
+            margin: 0;
+        }
+        
+        /* ==============================
+           DOWNLOAD BUTTON (BROWSER)
+           ============================== */
         .btn-download {
-            background: #ffffff;
+            background: white;
             color: #374151;
-            padding: 8px 16px;
-            border-radius: 6px;
+            padding: 10px 20px;
+            border-radius: 8px;
             border: 1px solid #d1d5db;
             font-weight: 500;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             cursor: pointer;
-            transition: all 0.2s;
-            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
         }
+        
         .btn-download:hover {
             background: #f3f4f6;
             border-color: #9ca3af;
             color: #111827;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        .btn-download i { color: #dc2626; /* PDF Red icon */ }
+        
+        .btn-download i { 
+            color: #dc2626;
+        }
         
         .btn-download.loading {
             opacity: 0.7;
             cursor: not-allowed;
-            background: #f3f4f6;
+            transform: none !important;
+            box-shadow: none !important;
         }
-
-        /* Helpers for PDF Generation */
+        
+        .btn-download.loading i {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* ==============================
+           PDF SPECIFIC STYLES (HIDDEN IN BROWSER)
+           ============================== */
         .pdf-header {
             display: none;
+        }
+        
+        .pdf-header-content {
             text-align: center;
             margin-bottom: 30px;
-            padding: 20px;
-            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #000;
         }
-        .pdf-header h2 { 
-            margin: 0 0 5px 0; 
-            color: #000; 
-            font-size: 20px;
-        }
-        .pdf-header p { 
-            margin: 0; 
-            color: #555;
-            font-size: 14px; 
-        }
-
-        /* PDF Specific Fixes */
-        .html2pdf__page-break {
-            height: 0;
-            page-break-after: always;
-            margin: 0;
-            border: none;
-        }
-
-        /* Report Table Styling for PDF - Clean & Simple */
-        .table-pdf {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 10pt; /* Slightly larger for readability */
-            margin-bottom: 20px;
-        }
-        .table-pdf th {
-            border-bottom: 2px solid #333; /* Only bottom border for header */
-            border-top: 1px solid #ddd;
-            padding: 12px 8px;
-            text-align: left;
+        
+        .company-name-pdf {
+            font-size: 24px;
             font-weight: bold;
             color: #000;
-        }
-        .table-pdf td {
-            padding: 10px 8px;
-            border-bottom: 1px solid #eee; /* Light horizontal lines only */
-            color: #333;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
-        /* Signature Section for PDF */
+        .company-info-pdf {
+            font-size: 11px;
+            color: #555;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+        
+        .report-title-pdf {
+            font-size: 18px;
+            font-weight: bold;
+            color: #000;
+            margin: 15px 0 8px 0;
+            text-decoration: underline;
+        }
+        
+        .period-pdf {
+            font-size: 14px;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .print-date-pdf {
+            font-size: 11px;
+            color: #666;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+            margin-top: 12px;
+        }
+        
+        /* PDF FOOTER */
         .pdf-footer {
             display: none;
-            margin-top: 40px;
-            page-break-inside: avoid;
         }
+        
+        .pdf-footer-content {
+            margin-top: 50px;
+            padding-top: 30px;
+            border-top: 1px solid #000;
+            text-align: right;
+        }
+        
         .signature-box {
-            float: right;
-            width: 200px;
+            display: inline-block;
             text-align: center;
+            width: 250px;
         }
+        
         .signature-line {
-            margin-top: 70px;
+            margin-top: 80px;
             border-bottom: 1px solid #000;
+            width: 250px;
+            display: inline-block;
         }
-
-        /* Print Styling (Fallback) */
-        @media print {
-            .admin-sidebar, .card-actions, .filter-bar, .btn-download { display: none !important; }
-            .main-content { margin-left: 0 !important; width: 100% !important; padding: 0cm !important; }
-            body { background: white; font-size: 11pt; -webkit-print-color-adjust: exact; }
-            .stat-card, .charts-section, .report-section { 
-                box-shadow: none !important; 
-                border: none !important; /* Remove borders for cleaner look */
-                break-inside: avoid;
+        
+        /* ==============================
+           PDF ONLY STYLES
+           ============================== */
+        .pdf-only {
+            display: none;
+        }
+        
+        .browser-only {
+            display: block;
+        }
+        
+        /* ==============================
+           FOR PDF EXPORT - SPECIAL CLASSES
+           ============================== */
+        .pdf-export .admin-sidebar,
+        .pdf-export .web-header,
+        .pdf-export .filter-bar,
+        .pdf-export .btn-download,
+        .pdf-export .sidebar-toggle,
+        .pdf-export [data-html2pdf-ignore="true"] {
+            display: none !important;
+        }
+        
+        .pdf-export .pdf-header {
+            display: block !important;
+        }
+        
+        .pdf-export .pdf-footer {
+            display: block !important;
+        }
+        
+        .pdf-export .main-content {
+            margin-left: 0 !important;
+            padding: 20px !important;
+            width: 100% !important;
+        }
+        
+        .pdf-export .stats-grid {
+            grid-template-columns: repeat(3, 1fr) !important;
+            gap: 15px !important;
+            margin-bottom: 25px !important;
+        }
+        
+        .pdf-export .stat-card {
+            border: 1px solid #ddd !important;
+            padding: 15px !important;
+            box-shadow: none !important;
+            display: block !important;
+            text-align: center;
+            border-radius: 8px !important;
+            background: #f9f9f9 !important;
+        }
+        
+        .pdf-export .stat-icon {
+            width: 40px !important;
+            height: 40px !important;
+            margin: 0 auto 10px !important;
+            font-size: 1rem !important;
+            border-radius: 8px !important;
+        }
+        
+        .pdf-export .stat-info h3 {
+            font-size: 16px !important;
+            margin-bottom: 5px !important;
+            color: #000 !important;
+        }
+        
+        .pdf-export .stat-info p {
+            font-size: 12px !important;
+            color: #555 !important;
+        }
+        
+        .pdf-export .chart-container {
+            border: 1px solid #ddd !important;
+            padding: 15px !important;
+            margin-bottom: 25px !important;
+            box-shadow: none !important;
+            border-radius: 8px !important;
+        }
+        
+        .pdf-export .chart-title {
+            font-size: 16px !important;
+            margin-bottom: 15px !important;
+            color: #000 !important;
+        }
+        
+        .pdf-export .chart-wrapper {
+            height: 200px !important;
+        }
+        
+        .pdf-export .report-grid {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 20px !important;
+            margin-bottom: 25px !important;
+        }
+        
+        .pdf-export .report-section {
+            border: 1px solid #ddd !important;
+            padding: 15px !important;
+            box-shadow: none !important;
+            border-radius: 8px !important;
+        }
+        
+        .pdf-export .table-report {
+            font-size: 10px !important;
+        }
+        
+        .pdf-export .table-report th {
+            padding: 8px 6px !important;
+            font-size: 10px !important;
+            background: #f1f1f1 !important;
+        }
+        
+        .pdf-export .table-report td {
+            padding: 8px 6px !important;
+            font-size: 10px !important;
+        }
+        
+        .pdf-export .feedback-container {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+        }
+        
+        .pdf-export .feedback-card {
+            margin-bottom: 10px !important;
+            padding: 10px !important;
+            box-shadow: none !important;
+            border: 1px solid #eee !important;
+            border-radius: 6px !important;
+        }
+        
+        .pdf-export .feedback-comment {
+            font-size: 10px !important;
+            padding: 8px !important;
+            background: #fafafa !important;
+        }
+        
+        /* ==============================
+           RESPONSIVE STYLES
+           ============================== */
+        @media (max-width: 1024px) {
+            .main-content {
+                margin-left: 0;
+                padding: 15px;
+            }
+            
+            .admin-sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            
+            .admin-sidebar.active {
+                transform: translateX(0);
             }
         }
-
-        /* Compact Mode for Single Page PDF */
-        /* FORCE FLEXBOX instead of Grid for PDF stability */
-        .compact-mode .stats-grid {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-        .compact-mode .stat-card {
-            flex: 1; /* Equal width */
-            padding: 8px 10px;
-            box-shadow: none;
-            border: 1px solid #ddd;
-            display: flex; /* Keep internal flex */
-            align-items: center; 
-        }
-        .compact-mode .stat-icon {
-            width: 30px;
-            height: 30px;
-            font-size: 0.9rem;
-            margin-right: 8px;
-        }
         
-        .compact-mode .charts-section {
-            padding: 5px;
-            margin-bottom: 10px;
-            box-shadow: none;
-            border: 1px solid #ddd;
-        }
-        
-        /* Change Report Grid to Flex Row for side-by-side */
-        .compact-mode .report-grid {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 10px;
-        }
-        .compact-mode .report-section {
-            flex: 1; /* Side by side equal width */
-            width: 48%; /* Force width */
-            padding: 5px;
-            box-shadow: none;
-            border: 1px solid #ddd;
-        }
-        
-        .compact-mode .table-pdf {
-             margin-bottom: 5px;
-        }
-        .compact-mode .table-pdf th,
-        .compact-mode .table-pdf td {
-            padding: 3px 5px; 
-            font-size: 8pt;
-            border-bottom: 1px solid #eee;
-        }
-        
-        /* Feedback Grid - 2 columns flex */
-        .compact-mode .feedback-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .compact-mode .feedback-grid > div {
-            flex: 1 1 30%; /* 3 per row roughly */
-            min-width: 150px;
-            border: 1px solid #eee;
-            background: none !important;
-        }
-
-        .compact-mode .pdf-header {
-            margin-bottom: 5px;
-            padding: 2px;
-        }
-        
-        /* Layout Fixes */
-        .compact-mode .main-content {
-            width: 100% !important;
-            max-width: 100% !important;
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .web-header {
+                flex-direction: column;
+                text-align: center;
+                gap: 15px;
+            }
+            
+            .filter-form {
+                flex-direction: column;
+                width: 100%;
+            }
+            
+            .form-control {
+                width: 100%;
+            }
+            
+            .feedback-container {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-    
+    <!-- SIDEBAR -->
     <?php include 'sidebar.php'; ?>
+    
+    <!-- TOGGLE BUTTON FOR MOBILE -->
+    <div class="sidebar-toggle" data-html2pdf-ignore="true" style="display: none; position: fixed; top: 15px; left: 15px; z-index: 1001; background: #1e40af; color: white; padding: 10px; border-radius: 5px; cursor: pointer;">
+        <i class="fas fa-bars"></i>
+    </div>
 
+    <!-- MAIN CONTENT -->
     <div class="main-content" id="mainContent">
-        <!-- Special Header for PDF only - Simple & Text Based -->
-        <div class="pdf-header" id="pdfHeader" style="text-align: center; margin-bottom: 30px;">
-            <h2 style="margin: 0 0 5px 0; font-size: 22px; color: #000; letter-spacing: 1px; text-transform: uppercase;">Apotek Sehat</h2>
-            <p style="margin: 0 0 20px 0; font-size: 12px; color: #555;">Jl. Raya Kesehatan No. 123, Jakarta | Telp: (021) 123-4567</p>
-            <hr style="border: none; border-top: 2px solid #000; margin-bottom: 2px;">
-            <hr style="border: none; border-top: 1px solid #000; margin-top: 0; margin-bottom: 20px;">
-            
-            <h3 style="margin: 0; font-size: 16px; font-weight: bold; text-decoration: underline;">LAPORAN BULANAN</h3>
-            <p style="margin: 5px 0 0; font-size: 12px;">Periode: <?php echo $bulan_indo[$month] . ' ' . $year; ?></p>
+        <!-- PDF HEADER (only for PDF) -->
+        <div class="pdf-header" id="pdfHeader">
+            <div class="pdf-header-content">
+                <div class="company-name-pdf">APOTEK SEHAT</div>
+                <div class="company-info-pdf">
+                    Jl. Kesehatan No. 123, Jakarta Selatan<br>
+                    Telp: (021) 1234-5678 | Email: info@apoteksehat.com<br>
+                    Website: www.apoteksehat.com
+                </div>
+                <div class="report-title-pdf">LAPORAN BULANAN APOTEK</div>
+                <div class="period-pdf">Periode: <?php echo strtoupper($bulan_indo[$month]) . ' ' . $year; ?></div>
+                <div class="print-date-pdf">Dicetak pada: <?php echo date('d/m/Y H:i:s'); ?></div>
+            </div>
         </div>
 
-        <header class="main-header" data-html2pdf-ignore="true">
-            <div class="header-left">
-                <h1><i class="fas fa-chart-line"></i> Laporan Bulanan</h1>
-                <p>Ringkasan kinerja toko untuk <?php echo $bulan_indo[$month] . ' ' . $year; ?></p>
-            </div>
-            <div class="header-right">
-                <button onclick="downloadPDF()" class="btn-download" id="btnDownload">
-                    <i class="fas fa-file-pdf"></i> Download PDF
-                </button>
+        <!-- WEB HEADER (only for browser) -->
+        <header class="web-header browser-only" data-html2pdf-ignore="true">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1><i class="fas fa-chart-line"></i> Laporan Bulanan</h1>
+                    <p>Ringkasan kinerja Apotek Sehat untuk <?php echo $bulan_indo[$month] . ' ' . $year; ?></p>
+                </div>
+                <div class="header-right">
+                    <button onclick="downloadPDF()" class="btn-download" id="btnDownload">
+                        <i class="fas fa-file-pdf"></i> Download PDF
+                    </button>
+                </div>
             </div>
         </header>
 
-        <div class="filter-bar" data-html2pdf-ignore="true">
+        <!-- FILTER BAR (only for browser) -->
+        <div class="filter-bar browser-only" data-html2pdf-ignore="true">
             <form method="GET" class="filter-form">
-                <select name="bulan" class="form-control" style="padding: 8px; border-radius: 6px; border: 1px solid #ddd;">
-                    <?php foreach($bulan_indo as $k => $v): ?>
-                        <option value="<?php echo $k; ?>" <?php echo $k == $month ? 'selected' : ''; ?>><?php echo $v; ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <select name="tahun" class="form-control" style="padding: 8px; border-radius: 6px; border: 1px solid #ddd;">
-                    <?php for($t = 2023; $t <= date('Y'); $t++): ?>
-                        <option value="<?php echo $t; ?>" <?php echo $t == $year ? 'selected' : ''; ?>><?php echo $t; ?></option>
-                    <?php endfor; ?>
-                </select>
-                <button type="submit" style="padding: 8px 15px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer;">
-                    <i class="fas fa-filter"></i> Tampilkan
-                </button>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <select name="bulan" class="form-control">
+                        <?php foreach($bulan_indo as $k => $v): ?>
+                            <option value="<?php echo $k; ?>" <?php echo $k == $month ? 'selected' : ''; ?>>
+                                <?php echo $v; ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <select name="tahun" class="form-control">
+                        <?php for($t = 2023; $t <= date('Y'); $t++): ?>
+                            <option value="<?php echo $t; ?>" <?php echo $t == $year ? 'selected' : ''; ?>>
+                                <?php echo $t; ?>
+                            </option>
+                        <?php endfor; ?>
+                    </select>
+                    <button type="submit" class="btn-filter">
+                        <i class="fas fa-filter"></i> Filter Laporan
+                    </button>
+                </div>
             </form>
+            <div style="font-size: 0.85rem; color: #6b7280;">
+                <i class="fas fa-info-circle"></i> Pilih bulan dan tahun untuk melihat laporan
+            </div>
         </div>
 
-        <div class="content-wrapper" style="grid-template-columns: 1fr;">
-            
-            <!-- 1. KARTU STATISTIK -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
-                    <div class="stat-info">
-                        <p>Total Pendapatan (<?php echo $bulan_indo[$month]; ?>)</p>
-                        <h3>Rp <?php echo number_format($revenue, 0, ',', '.'); ?></h3>
-                    </div>
+        <!-- STATISTICS CARDS -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-money-bill-wave"></i>
                 </div>
-                <div class="stat-card" style="border-left-color: #3b82f6;">
-                    <div class="stat-icon" style="background: #eff6ff; color: #3b82f6;"><i class="fas fa-shopping-cart"></i></div>
-                    <div class="stat-info">
-                        <p>Total Transaksi</p>
-                        <h3><?php echo number_format($total_transaksi); ?></h3>
-                    </div>
-                </div>
-                
-                <?php 
-                // Kalkulasi rata-rata
-                $avg_transaksi = $total_transaksi > 0 ? $revenue / $total_transaksi : 0;
-                ?>
-                <div class="stat-card" style="border-left-color: #8b5cf6;">
-                    <div class="stat-icon" style="background: #f5f3ff; color: #8b5cf6;"><i class="fas fa-chart-pie"></i></div>
-                    <div class="stat-info">
-                        <p>Rata-rata Transaksi</p>
-                        <h3>Rp <?php echo number_format($avg_transaksi, 0, ',', '.'); ?></h3>
-                    </div>
+                <div class="stat-info">
+                    <p>Total Pendapatan (<?php echo $bulan_indo[$month]; ?>)</p>
+                    <h3>Rp <?php echo number_format($revenue, 0, ',', '.'); ?></h3>
                 </div>
             </div>
-
-            <!-- 2. GRAFIK PENJUALAN -->
-            <div class="charts-section">
-                <div class="report-header">
-                    <h3><i class="fas fa-chart-area" style="color: #10b981;"></i> Tren Penjualan Bulanan (Tahun <?php echo $year; ?>)</h3>
+            
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-shopping-cart"></i>
                 </div>
-                <div style="position: relative; height: 300px; width: 100%;">
-                    <canvas id="salesChart"></canvas>
+                <div class="stat-info">
+                    <p>Total Transaksi</p>
+                    <h3><?php echo number_format($total_transaksi); ?></h3>
                 </div>
             </div>
-
-            <!-- 3. BEST SELLING & STOCK GRID -->
-             <div class="report-grid">
-                 <!-- 3A. PRODUK TERLARIS -->
-                 <div class="report-section">
-                    <div class="report-header">
-                        <h3><i class="fas fa-trophy" style="color: #eab308;"></i> Top 5 Produk (<?php echo $bulan_indo[$month]; ?>)</h3>
-                    </div>
-                    <?php if($result_best_selling && mysqli_num_rows($result_best_selling) > 0): ?>
-                        <table class="table-pdf">
-                            <thead>
-                                <tr>
-                                    <th>Produk</th>
-                                    <th style="text-align: center;">Terjual</th>
-                                    <th style="text-align: right;">Pendapatan</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php $rank = 1; while($item = mysqli_fetch_assoc($result_best_selling)): ?>
-                                <tr>
-                                    <td>
-                                        <strong><?php echo htmlspecialchars($item['nama_obat']); ?></strong><br>
-                                        <small style="color: #6b7280;"><?php echo htmlspecialchars($item['kategori']); ?></small>
-                                    </td>
-                                    <td style="text-align: center; font-weight: bold;"><?php echo $item['total_terjual']; ?></td>
-                                    <td style="text-align: right;">Rp <?php echo number_format($item['total_pendapatan'], 0, ',', '.'); ?></td>
-                                </tr>
-                                <?php endwhile; ?>
-                            </tbody>
-                        </table>
-                    <?php else: ?>
-                        <div style="text-align: center; padding: 30px; color: #9ca3af;">
-                            <i class="fas fa-box-open" style="font-size: 2em; margin-bottom: 10px;"></i>
-                            <p>Belum ada data penjualan bulan ini.</p>
-                        </div>
-                    <?php endif; ?>
-                 </div>
-
-                 <!-- 3B. STOK MENIPIS -->
-                <div class="report-section">
-                    <div class="report-header">
-                        <h3><i class="fas fa-exclamation-triangle" style="color: #f59e0b;"></i> Stok Menipis</h3>
-                    </div>
-                    <?php if(mysqli_num_rows($result_stok) > 0): ?>
-                        <table class="table" style="width: 100%;">
-                            <thead>
-                                <tr style="text-align: left; border-bottom: 2px solid #f3f4f6;">
-                                    <th style="padding: 10px;">Nama Produk</th>
-                                    <th style="padding: 10px;">Sisa</th>
-                                    <th style="padding: 10px;">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php while($item = mysqli_fetch_assoc($result_stok)): ?>
-                                <tr style="border-bottom: 1px solid #f9fafb;">
-                                    <td style="padding: 10px;"><?php echo htmlspecialchars($item['nama_obat']); ?></td>
-                                    <td style="padding: 10px; font-weight: bold;"><?php echo $item['stok']; ?></td>
-                                    <td style="padding: 10px;">
-                                        <span class="stock-badge <?php echo $item['stok'] == 0 ? 'stock-critical' : 'stock-warning'; ?>">
-                                            <?php echo $item['stok'] == 0 ? 'Habis' : 'Kritis'; ?>
-                                        </span>
-                                    </td>
-                                </tr>
-                                <?php endwhile; ?>
-                            </tbody>
-                        </table>
-                    <?php else: ?>
-                        <p style="text-align: center; color: #9ca3af; padding: 20px;">Stok aman. Tidak ada produk kritis.</p>
-                    <?php endif; ?>
-                </div>
-             </div>
             
-            <!-- 4. FEEDBACK (Full Width) -->
-            <div class="report-section" style="margin-bottom: 30px;">
-                <div class="report-header">
-                    <h3><i class="fas fa-star" style="color: #f59e0b;"></i> Feedback Terbaru</h3>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-chart-pie"></i>
                 </div>
-                <div class="feedback-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
-                    <?php if(mysqli_num_rows($result_feedback) > 0): ?>
-                        <?php while($feed = mysqli_fetch_assoc($result_feedback)): ?>
-                        <div style="padding: 15px; border: 1px solid #f3f4f6; border-radius: 8px; background: #fafafa;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <strong style="color: #374151;"><?php echo htmlspecialchars($feed['nama_user']); ?></strong>
-                                <span style="color: #f59e0b; font-size: 0.9em;">
-                                    <?php for($i=0;$i<5;$i++) echo ($i < $feed['bintang']) ? '★' : '☆'; ?>
-                                </span>
+                <div class="stat-info">
+                    <p>Rata-rata per Transaksi</p>
+                    <h3>Rp <?php echo number_format($avg_transaksi, 0, ',', '.'); ?></h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- CHART SECTION - TREND LINE -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-chart-line"></i> Tren Transaksi 30 Hari Terakhir
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="salesChart"></canvas>
+            </div>
+        </div>
+
+        <!-- REPORT GRID -->
+        <div class="report-grid">
+            <!-- Best Selling Products -->
+            <div class="report-section">
+                <div class="section-title">
+                    <i class="fas fa-trophy" style="color: #eab308;"></i> Top 5 Produk Terlaris
+                </div>
+                <?php if($result_best_selling && mysqli_num_rows($result_best_selling) > 0): ?>
+                    <table class="table-report">
+                        <thead>
+                            <tr>
+                                <th width="5%">#</th>
+                                <th width="45%">PRODUK</th>
+                                <th width="20%" style="text-align: center;">TERJUAL</th>
+                                <th width="30%" style="text-align: right;">PENDAPATAN</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php $rank = 1; while($item = mysqli_fetch_assoc($result_best_selling)): ?>
+                            <tr>
+                                <td style="font-weight: bold;"><?php echo $rank; ?></td>
+                                <td>
+                                    <div style="font-weight: 600;"><?php echo htmlspecialchars($item['nama_obat']); ?></div>
+                                    <div style="font-size: 0.85rem; color: #6b7280;"><?php echo htmlspecialchars($item['kategori']); ?></div>
+                                </td>
+                                <td style="text-align: center; font-weight: bold; color: #10b981;">
+                                    <?php echo number_format($item['total_terjual']); ?>
+                                </td>
+                                <td style="text-align: right; font-weight: bold;">
+                                    Rp <?php echo number_format($item['total_pendapatan'], 0, ',', '.'); ?>
+                                </td>
+                            </tr>
+                            <?php $rank++; endwhile; ?>
+                        </tbody>
+                    </table>
+                <?php else: ?>
+                    <div class="empty-state">
+                        <i class="fas fa-box-open"></i>
+                        <p>Belum ada data penjualan untuk bulan ini</p>
+                    </div>
+                <?php endif; ?>
+            </div>
+
+            <!-- Low Stock -->
+            <div class="report-section">
+                <div class="section-title">
+                    <i class="fas fa-exclamation-triangle" style="color: #ef4444;"></i> Stok Hampir Habis
+                </div>
+                <?php if($result_stok && mysqli_num_rows($result_stok) > 0): ?>
+                    <table class="table-report">
+                        <thead>
+                            <tr>
+                                <th width="45%">NAMA OBAT</th>
+                                <th width="25%">KATEGORI</th>
+                                <th width="15%" style="text-align: center;">STOK</th>
+                                <th width="15%">STATUS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php while($item = mysqli_fetch_assoc($result_stok)): 
+                                $status = $item['stok'] == 0 ? 'Habis' : ($item['stok'] <= 5 ? 'Kritis' : 'Menipis');
+                                $badge_class = $item['stok'] == 0 ? 'badge-danger' : ($item['stok'] <= 5 ? 'badge-danger' : 'badge-warning');
+                            ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($item['nama_obat']); ?></td>
+                                <td style="color: #6b7280;"><?php echo htmlspecialchars($item['kategori']); ?></td>
+                                <td style="text-align: center; font-weight: bold; color: <?php echo $item['stok'] <= 5 ? '#ef4444' : '#f59e0b'; ?>">
+                                    <?php echo $item['stok']; ?>
+                                </td>
+                                <td>
+                                    <span class="badge <?php echo $badge_class; ?>"><?php echo $status; ?></span>
+                                </td>
+                            </tr>
+                            <?php endwhile; ?>
+                        </tbody>
+                    </table>
+                <?php else: ?>
+                    <div class="empty-state">
+                        <i class="fas fa-check-circle" style="color: #10b981;"></i>
+                        <p>Semua stok dalam kondisi baik</p>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- CUSTOMER FEEDBACK -->
+        <div class="report-section" style="margin-top: 20px;">
+            <div class="section-title">
+                <i class="fas fa-star" style="color: #f59e0b;"></i> Ulasan & Rating Terbaru
+            </div>
+            <div class="feedback-container">
+                <?php if($result_feedback && mysqli_num_rows($result_feedback) > 0): ?>
+                    <?php while($feed = mysqli_fetch_assoc($result_feedback)): ?>
+                    <div class="feedback-card">
+                        <div class="feedback-header">
+                            <div class="feedback-user"><?php echo htmlspecialchars($feed['nama_user']); ?></div>
+                            <div class="feedback-stars">
+                                <?php for($i=1; $i<=5; $i++): ?>
+                                    <?php if($i <= $feed['bintang']): ?>
+                                        <i class="fas fa-star"></i>
+                                    <?php else: ?>
+                                        <i class="far fa-star"></i>
+                                    <?php endif; ?>
+                                <?php endfor; ?>
                             </div>
-                            <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 0.9rem; font-style: italic;">"<?php echo htmlspecialchars($feed['komentar']); ?>"</p>
-                            <small style="color: #d1d5db; font-size: 0.75rem;"><i class="far fa-calendar-alt"></i> <?php echo date('d M Y', strtotime($feed['tanggal_rating'])); ?></small>
                         </div>
-                        <?php endwhile; ?>
-                    <?php else: ?>
-                        <p style="text-align: center; color: #9ca3af; padding: 20px; width: 100%;">Belum ada ulasan baru.</p>
-                    <?php endif; ?>
+                        <div class="feedback-comment">
+                            "<?php echo htmlspecialchars($feed['komentar']); ?>"
+                        </div>
+                        <div class="feedback-date">
+                            <i class="far fa-calendar-alt"></i> 
+                            <?php echo date('d M Y', strtotime($feed['tanggal_rating'])); ?>
+                        </div>
+                    </div>
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <div class="empty-state">
+                        <i class="far fa-comment-dots"></i>
+                        <p>Belum ada ulasan untuk ditampilkan</p>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- PDF FOOTER -->
+        <div class="pdf-footer" id="pdfFooter">
+            <div class="pdf-footer-content">
+                <div class="signature-box">
+                    <p>Jakarta, <?php echo date('d') . ' ' . $bulan_indo[(int)date('m')] . ' ' . date('Y'); ?></p>
+                    <div style="margin-top: 30px;">Mengetahui,</div>
+                    <div style="margin-top: 5px;">Kepala Apotek Sehat</div>
+                    <div class="signature-line"></div>
+                    <div style="margin-top: 5px; font-weight: bold;">[Nama Lengkap]</div>
                 </div>
             </div>
-
         </div>
-        
-        <!-- Signature Section -->
-        <div class="pdf-footer" id="pdfFooter">
-            <div class="signature-box">
-                <p>Jakarta, <?php echo date('d') . ' ' . $bulan_indo[(int)date('m')] . ' ' . date('Y'); ?></p>
-                <div style="margin-bottom: 5px;">Mengetahui,</div>
-                <div>Kepala Apotek</div>
-                <div class="signature-line"></div>
-                <div style="margin-top: 5px;">( ........................... )</div>
-            </div>
-        </div>
-
     </div>
 
-    <script src="script.js"></script>
     <script>
-        // PDF Download Logic
+        // Initialize Chart.js with trend line
+        const ctx = document.getElementById('salesChart').getContext('2d');
+        
+        // Create gradient
+        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
+        gradient.addColorStop(0.7, 'rgba(16, 185, 129, 0.1)');
+        gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+        
+        // Create chart
+        const salesChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: <?php echo json_encode($chart_labels); ?>,
+                datasets: [{
+                    label: 'Transaksi Harian',
+                    data: <?php echo json_encode($chart_data); ?>,
+                    borderColor: '#10b981',
+                    backgroundColor: gradient,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#10b981',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleFont: { size: 12 },
+                        bodyFont: { size: 12 },
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.raw} transaksi`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            font: {
+                                size: 11
+                            },
+                            stepSize: 1
+                        },
+                        title: {
+                            display: true,
+                            text: 'Jumlah Transaksi',
+                            font: {
+                                size: 12,
+                                weight: 'bold'
+                            }
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            font: {
+                                size: 10
+                            },
+                            maxRotation: 45
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'nearest'
+                }
+            }
+        });
+
+        // Mobile sidebar toggle
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebarToggle = document.querySelector('.sidebar-toggle');
+            const sidebar = document.querySelector('.admin-sidebar');
+            
+            if (window.innerWidth <= 1024) {
+                if (sidebarToggle) sidebarToggle.style.display = 'block';
+                if (sidebar) sidebar.style.transform = 'translateX(-100%)';
+            }
+            
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function() {
+                    if (sidebar) {
+                        sidebar.classList.toggle('active');
+                    }
+                });
+            }
+            
+            // Close sidebar when clicking outside
+            document.addEventListener('click', function(event) {
+                if (window.innerWidth <= 1024 && sidebar && sidebar.classList.contains('active')) {
+                    if (!sidebar.contains(event.target) && !sidebarToggle.contains(event.target)) {
+                        sidebar.classList.remove('active');
+                    }
+                }
+            });
+            
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                if (window.innerWidth > 1024) {
+                    if (sidebarToggle) sidebarToggle.style.display = 'none';
+                    if (sidebar) {
+                        sidebar.style.transform = 'translateX(0)';
+                        sidebar.classList.remove('active');
+                    }
+                } else {
+                    if (sidebarToggle) sidebarToggle.style.display = 'block';
+                }
+            });
+        });
+
+        // PDF Download Function - FIXED VERSION
         function downloadPDF() {
             const element = document.getElementById('mainContent');
             const btn = document.getElementById('btnDownload');
@@ -586,100 +1261,206 @@ $result_feedback = mysqli_query($conn, $query_feedback);
             const pdfFooter = document.getElementById('pdfFooter');
             const originalText = btn.innerHTML;
             
-            // 1. Enter Compact PDF Mode
-            element.classList.add('compact-mode');
-            
-            // 2. Loading State
+            // Show loading
             btn.classList.add('loading');
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses PDF...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Membuat PDF...';
             
-            // 3. Show custom header & footer
+            // Store original chart for restoration
+            const chartCanvas = document.getElementById('salesChart');
+            const chartContainer = chartCanvas.parentElement;
+            const originalChartHTML = chartContainer.innerHTML;
+            
+            // Convert chart to image for PDF
+            const chartImage = chartCanvas.toDataURL('image/png', 1.0);
+            chartContainer.innerHTML = `<img src="${chartImage}" style="width:100%; height:200px; object-fit:contain;">`;
+            
+            // Show PDF elements and hide browser elements
             pdfHeader.style.display = 'block';
             pdfFooter.style.display = 'block';
             
-            // 4. Options for html2pdf
+            // Hide all browser-only elements
+            const browserElements = document.querySelectorAll('.browser-only');
+            browserElements.forEach(el => {
+                el.style.display = 'none';
+            });
+            
+            // Add PDF export class to body
+            document.body.classList.add('pdf-export');
+            
+            // PDF options - FIXED for clean output
             const opt = {
-                margin:       [10, 10, 10, 10], // Tight margins
-                filename:     'Laporan_Bulanan_<?php echo $bulan_indo[$month] . '_' . $year; ?>.pdf',
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { 
-                    scale: 2, 
+                margin: [10, 10, 10, 10],
+                filename: `Laporan_Apotek_<?php echo str_replace(' ', '_', $bulan_indo[$month]); ?>_<?php echo $year; ?>.pdf`,
+                image: { 
+                    type: 'jpeg', 
+                    quality: 0.98 
+                },
+                html2canvas: { 
+                    scale: 3, // Higher scale for better quality
                     useCORS: true,
                     logging: false,
-                    scrollY: 0
+                    scrollY: 0,
+                    backgroundColor: '#ffffff',
+                    letterRendering: true,
+                    allowTaint: false,
+                    foreignObjectRendering: false,
+                    onclone: function(clonedDoc) {
+                        // Apply PDF styles to cloned document
+                        clonedDoc.body.classList.add('pdf-export');
+                        
+                        // Hide browser elements in cloned document
+                        const clonedBrowserElements = clonedDoc.querySelectorAll('.browser-only');
+                        clonedBrowserElements.forEach(el => {
+                            el.style.display = 'none';
+                        });
+                        
+                        // Show PDF elements in cloned document
+                        const clonedPdfHeader = clonedDoc.getElementById('pdfHeader');
+                        const clonedPdfFooter = clonedDoc.getElementById('pdfFooter');
+                        if (clonedPdfHeader) clonedPdfHeader.style.display = 'block';
+                        if (clonedPdfFooter) clonedPdfFooter.style.display = 'block';
+                        
+                        // Convert chart in cloned document
+                        const clonedChartCanvas = clonedDoc.getElementById('salesChart');
+                        if (clonedChartCanvas) {
+                            const clonedChartContainer = clonedChartCanvas.parentElement;
+                            clonedChartContainer.innerHTML = `<img src="${chartImage}" style="width:100%; height:200px; object-fit:contain;">`;
+                        }
+                    }
                 },
-                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+                jsPDF: { 
+                    unit: 'mm', 
+                    format: 'a4', 
+                    orientation: 'portrait',
+                    compress: true
+                },
+                pagebreak: { 
+                    mode: ['avoid-all', 'css', 'legacy'],
+                    avoid: '.report-section, .stat-card, .feedback-card'
+                }
             };
 
-            // 5. Generate with delay
+            // Delay to ensure DOM updates
             setTimeout(() => {
-                html2pdf().set(opt).from(element).save().then(function(){
-                    // 6. Restore State
-                    pdfHeader.style.display = 'none';
-                    pdfFooter.style.display = 'none';
-                    element.classList.remove('compact-mode');
-                    btn.classList.remove('loading');
-                    btn.innerHTML = originalText;
-                }).catch(function(error) {
-                    element.classList.remove('compact-mode');
-                    console.error('PDF Error:', error);
-                    alert('Gagal mengunduh PDF.');
-                    btn.classList.remove('loading');
-                    btn.innerHTML = originalText;
+                html2pdf()
+                    .set(opt)
+                    .from(element)
+                    .save()
+                    .then(() => {
+                        // Success - restore original state
+                        restoreOriginalState();
+                        showNotification('PDF berhasil diunduh!', 'success');
+                    })
+                    .catch(error => {
+                        console.error('PDF Error:', error);
+                        restoreOriginalState();
+                        showNotification('Gagal membuat PDF. Silakan coba lagi.', 'error');
+                    });
+            }, 1000);
+            
+            // Function to restore original state
+            function restoreOriginalState() {
+                // Restore chart
+                chartContainer.innerHTML = originalChartHTML;
+                
+                // Hide PDF elements
+                pdfHeader.style.display = 'none';
+                pdfFooter.style.display = 'none';
+                
+                // Show browser elements
+                browserElements.forEach(el => {
+                    el.style.display = '';
                 });
-            }, 500);
+                
+                // Remove PDF export class
+                document.body.classList.remove('pdf-export');
+                
+                // Restore button
+                btn.classList.remove('loading');
+                btn.innerHTML = originalText;
+                
+                // Reinitialize chart
+                setTimeout(() => {
+                    if (window.salesChart) {
+                        window.salesChart.destroy();
+                    }
+                    window.salesChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: <?php echo json_encode($chart_labels); ?>,
+                            datasets: [{
+                                label: 'Transaksi Harian',
+                                data: <?php echo json_encode($chart_data); ?>,
+                                borderColor: '#10b981',
+                                backgroundColor: gradient,
+                                borderWidth: 3,
+                                fill: true,
+                                tension: 0.4,
+                                pointBackgroundColor: '#10b981',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 2,
+                                pointRadius: 4,
+                                pointHoverRadius: 6
+                            }]
+                        },
+                        options: salesChart.options
+                    });
+                }, 100);
+            }
         }
 
-        // Inisialisasi Chart.js
-        const ctx = document.getElementById('salesChart').getContext('2d');
-        
-        // Gradient
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, 'rgba(59, 130, 246, 0.2)'); // Blue tint
-        gradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+        // Notification function
+        function showNotification(message, type) {
+            // Remove existing notification
+            const existing = document.querySelector('.custom-notification');
+            if (existing) existing.remove();
+            
+            // Create notification
+            const notification = document.createElement('div');
+            notification.className = 'custom-notification';
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 15px 25px;
+                border-radius: 10px;
+                color: white;
+                font-weight: 500;
+                z-index: 9999;
+                animation: slideIn 0.3s ease;
+                background: ${type === 'success' ? '#10b981' : '#ef4444'};
+                box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+                font-size: 14px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            `;
+            notification.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+                ${message}
+            `;
+            document.body.appendChild(notification);
+            
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
 
-        new Chart(ctx, {
-            type: 'bar', // Changed to Bar for monthly comparison
-            data: {
-                labels: <?php echo json_encode($chart_labels); ?>,
-                datasets: [{
-                    label: 'Pendapatan',
-                    data: <?php echo json_encode($chart_data_values); ?>,
-                    borderColor: '#3b82f6',
-                    backgroundColor: gradient,
-                    borderWidth: 2,
-                    borderRadius: 4,
-                    barPercentage: 0.6
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        enabled: true
-                    }
-                },
-                scales: {
-                    y: { 
-                        beginAtZero: true,
-                        grid: { borderDash: [2, 4], color: '#f3f4f6' },
-                        ticks: {
-                            font: { size: 10 },
-                            callback: function(value, index, values) {
-                                return (value / 1000) + 'k';
-                            }
-                        }
-                    },
-                    x: {
-                        grid: { display: false },
-                        ticks: { font: { size: 9 } }
-                    }
-                }
+        // Add animation styles
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
             }
-        });
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html>
