@@ -256,6 +256,16 @@ $darkColor = darkenColor($currentRoleConfig['color'], 30);
                         <i class="fas fa-chevron-right"></i>
                     </div>
                 </a>
+                <a href="laporan_bulanan.php"
+                    class="nav-item <?php echo $current_page == 'laporan_bulanan.php' ? 'active' : ''; ?>">
+                    <div class="nav-icon">
+                        <i class="fas fa-chart-bar"></i>
+                    </div>
+                    <span class="nav-text">Laporan Bulanan</span>
+                    <div class="nav-indicator">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </a>
             </div>
 
             <div class="nav-section">
