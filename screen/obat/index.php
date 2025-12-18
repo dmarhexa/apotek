@@ -691,6 +691,29 @@ function safeOutput($string)
     console.log("User logged in: <?php echo $isLoggedIn ? 'true' : 'false'; ?>");
     console.log("User role: <?php echo $userRole; ?>");
     console.log("Total items: <?php echo $total_items; ?>");
+
+    // Auto-trigger purchase modal if purchase_id is present
+    <?php if (isset($_GET['purchase_id'])): 
+        $pid = (int)$_GET['purchase_id'];
+        $p_query = mysqli_query($conn, "SELECT * FROM obat WHERE id_obat = $pid");
+        if ($p_row = mysqli_fetch_assoc($p_query)):
+            $p_nama = addslashes($p_row['nama_obat']);
+            $p_harga = $p_row['harga'];
+            $p_stok = $p_row['stok'];
+    ?>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Wait a bit to ensure everything is loaded, then trigger
+        setTimeout(function() {
+            showPurchaseForm(<?php echo $pid; ?>, '<?php echo $p_nama; ?>', <?php echo $p_harga; ?>, <?php echo $p_stok; ?>);
+            
+            // Optional: Scroll to the modal or product
+            const productCard = document.querySelector('.product-card button[onclick*="<?php echo $pid; ?>"]').closest('.product-card');
+            if (productCard) {
+                productCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 500);
+    });
+    <?php endif; endif; ?>
     </script>
 </body>
 

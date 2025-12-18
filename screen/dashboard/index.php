@@ -153,7 +153,7 @@ $kategori_obat = mysqli_query($conn, "
                                         <span class="price">Rp <?php echo number_format($obat['harga'], 0, ',', '.'); ?></span>
                                         <span class="stock">Stok: <?php echo $obat['stok']; ?></span>
                                     </div>
-                                    <a href="../obat/detail.php?id=<?php echo $obat['id_obat']; ?>" class="btn-buy-now">
+                                    <a href="../obat/?purchase_id=<?php echo $obat['id_obat']; ?>" class="btn-buy-now">
                                         Beli Sekarang
                                     </a>
                                 </div>
@@ -175,9 +175,9 @@ $kategori_obat = mysqli_query($conn, "
                     <div class="doctors-grid">
                         <?php while ($dokter = mysqli_fetch_assoc($dokter_terbaik)): 
                             // Tentukan path gambar dokter
-                            $gambar_dokter = !empty($dokter['foto']) && file_exists("../../assets/dokter/{$dokter['foto']}") 
-                                ? "../../assets/dokter/{$dokter['foto']}" 
-                                : "../../assets/dokter/default_dokter.png";
+                            $gambar_dokter = !empty($dokter['foto']) && file_exists("../../assets/images/dokter/{$dokter['foto']}") 
+                                ? "../../assets/images/dokter/{$dokter['foto']}" 
+                                : "../../assets/images/dokter/default.png";
                         ?>
                         <div class="doctor-card">
                             <div class="doctor-image">
@@ -202,7 +202,7 @@ $kategori_obat = mysqli_query($conn, "
                                     <span class="consultation-fee">
                                         Rp <?php echo number_format($dokter['biaya_konsultasi'], 0, ',', '.'); ?>
                                     </span>
-                                    <a href="../dokter/?id=<?php echo $dokter['id_dokter']; ?>" class="btn-consult">
+                                    <a href="../konsultasi/?wa_id=<?php echo $dokter['id_dokter']; ?>" class="btn-consult">
                                         Konsultasi
                                     </a>
                                 </div>

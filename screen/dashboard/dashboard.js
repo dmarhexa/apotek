@@ -80,7 +80,7 @@ function handleImageErrors() {
             if (src.includes('obat')) {
                 this.src = '../../assets/images/obat/default.png';
             } else if (src.includes('dokter')) {
-                this.src = '../../assets/dokter/default_dokter.png';
+                this.src = '../../assets/images/dokter/default_dokter.png';
             } else {
                 this.src = '../../assets/images/default.png';
             }

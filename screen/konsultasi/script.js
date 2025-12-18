@@ -187,479 +187,289 @@ function showDoctorDetail(doctorId) {
     
     // Fetch doctor details via AJAX
     fetch(`../../api/get_doctor_detail.php?id=${doctorId}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success && data.doctor) {
-                const doctor = data.doctor;
-                createDoctorDetailContent(doctor);
-            } else {
-                showError('Dokter tidak ditemukan');
+        .then(response => response.text()) // Get text first to debug
+        .then(text => {
+            console.log("Raw API Response:", text); // Debug log
+            try {
+                const data = JSON.parse(text);
+                if (data.success && data.doctor) {
+                    const doctor = data.doctor;
+                    createDoctorDetailContent(doctor);
+                } else {
+                    showError(data.message || 'Dokter tidak ditemukan');
+                }
+            } catch (e) {
+                console.error("JSON Parse Error:", e);
+                showError('Respons server tidak valid');
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            showError('Gagal memuat detail dokter');
+            console.error('Fetch Error:', error);
+            showError('Gagal memuat detail dokter: ' + error.message);
         });
+}
+
+// ===== HELPER FUNCTIONS =====
+function formatNumber(num) {
+    if (num === null || num === undefined) return '0';
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
 function createDoctorDetailContent(doctor) {
     const detailHTML = `
         <div class="doctor-detail-view">
-            <div class="detail-profile">
-                <div class="detail-avatar-large">
-                    ${doctor.foto ? 
-                        `<img src="../../uploads/dokter/${doctor.foto}" alt="${doctor.nama_dokter}">` : 
-                        `<div class="avatar-placeholder-large">
-                            <i class="fas fa-user-md"></i>
-                        </div>`
-                    }
+            <div class="detail-header-card">
+                <div class="detail-avatar-wrapper">
+                    <div class="detail-avatar-large">
+                        ${doctor.foto ? 
+                            `<img src="../../assets/images/dokter/${doctor.foto}" alt="${doctor.nama_dokter}" onerror="this.onerror=null;this.src='../../assets/images/dokter/default.png';">` : 
+                            `<img src="../../assets/images/dokter/default.png" alt="Default Doctor">`
+                        }
+                        <div class="status-indicator online" title="Tersedia"></div>
+                    </div>
                 </div>
-                <div class="profile-info">
+                
+                <div class="profile-info-center">
                     <h2>Dr. ${doctor.nama_dokter}</h2>
-                    <div class="profile-badges">
-                        <span class="badge-specialization">${doctor.spesialisasi}</span>
-                        <span class="badge-experience">
-                            <i class="fas fa-briefcase"></i>
-                            ${doctor.pengalaman} Tahun Pengalaman
-                        </span>
-                    </div>
-                    <div class="profile-rating">
-                        <div class="stars">
-                            ${'<i class="fas fa-star"></i>'.repeat(5)}
-                        </div>
-                        <span class="rating-value">4.8</span>
-                        <span class="reviews">(120 ulasan)</span>
+                    <p class="specialist-text">${doctor.spesialisasi || 'Dokter Umum'}</p>
+                    
+                    <div class="rating-pill">
+                        <i class="fas fa-star"></i>
+                        <span>4.8</span>
+                        <span class="divider">•</span>
+                        <span>120+ Pasien</span>
                     </div>
                 </div>
             </div>
             
-            <div class="detail-sections">
-                <div class="detail-section">
-                    <h3><i class="fas fa-id-card"></i> Informasi Kontak</h3>
-                    <div class="section-content">
-                        <div class="info-row">
-                            <label><i class="fas fa-phone"></i> Telepon</label>
-                            <span>${doctor.nomor_telepon}</span>
+            <div class="detail-grid">
+                <div class="detail-card info-card">
+                    <h3><i class="fas fa-info-circle"></i> Info Profesional</h3>
+                    <div class="info-list">
+                        <div class="info-item">
+                            <span class="label">Pengalaman</span>
+                            <span class="value">${doctor.pengalaman} Tahun</span>
                         </div>
-                        <div class="info-row">
-                            <label><i class="fas fa-envelope"></i> Email</label>
-                            <span>${doctor.email}</span>
+                        <div class="info-item">
+                            <span class="label">Email</span>
+                            <span class="value">${doctor.email}</span>
                         </div>
-                        <div class="info-row">
-                            <label><i class="fas fa-money-bill-wave"></i> Biaya Konsultasi</label>
-                            <span class="consultation-price">Rp ${formatNumber(doctor.biaya_konsultasi)}</span>
+                         <div class="info-item">
+                            <span class="label">Telepon</span>
+                            <span class="value">${doctor.nomor_telepon}</span>
                         </div>
                     </div>
                 </div>
-                
-                <div class="detail-section">
-                    <h3><i class="fas fa-calendar-alt"></i> Jadwal Praktek</h3>
-                    <div class="section-content">
-                        <pre class="schedule-display">${doctor.jadwal_praktek || 'Jadwal akan diinformasikan saat konsultasi'}</pre>
+
+                <div class="detail-card schedule-card">
+                    <h3><i class="fas fa-calendar-check"></i> Jadwal Praktik</h3>
+                    <div class="schedule-box">
+                        <p>${doctor.jadwal_praktek || 'Senin - Jumat: 09.00 - 17.00'}</p>
                     </div>
                 </div>
-                
-                <div class="detail-section">
-                    <h3><i class="fas fa-graduation-cap"></i> Keahlian</h3>
-                    <div class="section-content">
-                        <div class="expertise-tags">
-                            <span class="expertise-tag">Konsultasi Umum</span>
-                            <span class="expertise-tag">Resep Obat</span>
-                            <span class="expertise-tag">Konsultasi Online</span>
-                            <span class="expertise-tag">Follow-up</span>
-                        </div>
+
+                <div class="detail-card fee-card">
+                    <h3><i class="fas fa-tag"></i> Biaya Konsultasi</h3>
+                    <div class="price-box">
+                        <span class="price-label">Mulai dari</span>
+                        <span class="price-amount">Rp ${formatNumber(doctor.biaya_konsultasi)}</span>
                     </div>
                 </div>
             </div>
             
-            <div class="detail-actions">
-                <button class="btn-close" onclick="closeDoctorDetail()">
-                    <i class="fas fa-times"></i> Tutup
+            <div class="detail-actions-sticky">
+                <button class="btn-secondary-action" onclick="closeDoctorDetail()">
+                    Tutup
                 </button>
-                <button class="btn-consult-large" onclick="startWhatsAppConsult('${doctor.nama_dokter}', '${doctor.nomor_telepon}')">
-                    <i class="fab fa-whatsapp"></i> Konsultasi via WhatsApp
+                <button class="btn-primary-action" onclick="startWhatsAppConsult('${doctor.nama_dokter}', '${doctor.nomor_telepon}')">
+                    <i class="fab fa-whatsapp"></i> Chat via WhatsApp
                 </button>
             </div>
         </div>
     `;
     
     document.getElementById('doctorDetailContent').innerHTML = detailHTML;
-    addDetailModalStyles();
 }
 
-function closeDoctorDetail() {
-    document.getElementById('doctorDetailModal').style.display = 'none';
-    document.body.style.overflow = 'auto';
-}
-
-function showError(message) {
-    document.getElementById('doctorDetailContent').innerHTML = `
-        <div class="error-state">
-            <i class="fas fa-exclamation-triangle fa-2x"></i>
-            <h4>Terjadi Kesalahan</h4>
-            <p>${message}</p>
-            <button class="btn-retry" onclick="closeDoctorDetail()">
-                <i class="fas fa-times"></i> Tutup
-            </button>
-        </div>
-    `;
-}
-
-// ===== HELPER FUNCTIONS =====
-function formatNumber(num) {
-    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-}
-
-function showNotification(message, type = 'info') {
-    // Remove existing notification
-    const existingNotification = document.querySelector('.custom-notification');
-    if (existingNotification) existingNotification.remove();
-    
-    const notification = document.createElement('div');
-    notification.className = `custom-notification notification-${type}`;
-    notification.innerHTML = `
-        <i class="fas ${getNotificationIcon(type)}"></i>
-        <span>${message}</span>
-    `;
-    
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: white;
-        padding: 15px 20px;
-        border-radius: 10px;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.15);
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        z-index: 3000;
-        animation: slideInRight 0.3s ease;
-        border-left: 4px solid ${getNotificationColor(type)};
-        font-family: 'Inter', sans-serif;
-        min-width: 300px;
-        max-width: 400px;
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Auto remove after 3 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.animation = 'slideOutRight 0.3s ease forwards';
-            setTimeout(() => notification.remove(), 300);
-        }
-    }, 3000);
-}
-
-function getNotificationIcon(type) {
-    switch(type) {
-        case 'success': return 'fa-check-circle';
-        case 'error': return 'fa-exclamation-circle';
-        case 'warning': return 'fa-exclamation-triangle';
-        default: return 'fa-info-circle';
-    }
-}
-
-function getNotificationColor(type) {
-    switch(type) {
-        case 'success': return '#10b981';
-        case 'error': return '#ef4444';
-        case 'warning': return '#f59e0b';
-        default: return '#3b82f6';
-    }
-}
+// ... existing code ...
 
 // Add animation styles
 const animationStyles = document.createElement('style');
 animationStyles.textContent = `
-    @keyframes slideInRight {
-        from {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    
-    @keyframes slideOutRight {
-        to {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-    }
-    
     .doctor-detail-view {
         font-family: 'Inter', sans-serif;
-    }
-    
-    .detail-profile {
-        display: flex;
-        gap: 25px;
-        align-items: center;
-        margin-bottom: 30px;
         padding-bottom: 20px;
-        border-bottom: 2px solid #e5e7eb;
     }
-    
-    .detail-avatar-large {
-        flex-shrink: 0;
+
+    /* HEADER */
+    .detail-header-card {
+        text-align: center;
+        margin-bottom: 30px;
+        position: relative;
     }
-    
+
+    .detail-avatar-wrapper {
+        position: relative;
+        display: inline-block;
+        margin-bottom: 15px;
+    }
+
     .detail-avatar-large img {
-        width: 120px;
-        height: 120px;
+        width: 100px;
+        height: 100px;
         border-radius: 50%;
         object-fit: cover;
-        border: 4px solid #e5e7eb;
-        box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        border: 4px solid #fff;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.1);
     }
-    
-    .avatar-placeholder-large {
-        width: 120px;
-        height: 120px;
+
+    .status-indicator {
+        position: absolute;
+        bottom: 5px;
+        right: 5px;
+        width: 18px;
+        height: 18px;
         border-radius: 50%;
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 3rem;
-        border: 4px solid #e5e7eb;
-        box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        border: 3px solid #fff;
+        background: #10b981; /* Default online */
     }
-    
-    .profile-info h2 {
+
+    .profile-info-center h2 {
+        font-size: 1.5rem;
         color: #1f2937;
-        font-size: 1.8rem;
-        margin-bottom: 10px;
+        margin-bottom: 5px;
     }
-    
-    .profile-badges {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 15px;
-        flex-wrap: wrap;
-    }
-    
-    .badge-specialization {
-        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-        color: white;
-        padding: 6px 15px;
-        border-radius: 20px;
-        font-size: 0.9rem;
-        font-weight: 600;
-    }
-    
-    .badge-experience {
-        background: #f3f4f6;
-        color: #374151;
-        padding: 6px 15px;
-        border-radius: 20px;
-        font-size: 0.9rem;
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-    }
-    
-    .badge-experience i {
-        color: #f59e0b;
-    }
-    
-    .profile-rating {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+
+    .specialist-text {
         color: #6b7280;
+        font-weight: 500;
+        margin-bottom: 12px;
     }
-    
-    .profile-rating .stars i {
-        color: #fbbf24;
-    }
-    
-    .rating-value {
-        font-weight: 700;
-        color: #1f2937;
-    }
-    
-    .reviews {
+
+    .rating-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #f3f4f6;
+        padding: 6px 16px;
+        border-radius: 20px;
         font-size: 0.9rem;
+        color: #4b5563;
     }
-    
-    .detail-sections {
+
+    .rating-pill i { color: #f59e0b; }
+    .rating-pill .divider { color: #d1d5db; }
+
+    /* GRID LAYOUT */
+    .detail-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 15px;
         margin-bottom: 30px;
     }
-    
-    .detail-section {
-        margin-bottom: 25px;
+
+    .detail-card {
+        background: #f9fafb;
+        border-radius: 12px;
+        padding: 15px;
+        border: 1px solid #e5e7eb;
     }
-    
-    .detail-section h3 {
+
+    .detail-card h3 {
+        font-size: 1rem;
+        color: #374151;
+        margin-bottom: 12px;
         display: flex;
         align-items: center;
+        gap: 8px;
+    }
+
+    .detail-card h3 i { color: #10b981; }
+
+    .info-list {
+        display: flex;
+        flex-direction: column;
         gap: 10px;
-        color: #1f2937;
-        margin-bottom: 15px;
-        font-size: 1.2rem;
     }
-    
-    .detail-section h3 i {
-        color: #10b981;
+
+    .info-item {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.95rem;
     }
-    
-    .section-content {
-        background: #f8fafc;
-        padding: 20px;
-        border-radius: 10px;
+
+    .info-item .label { color: #6b7280; }
+    .info-item .value { color: #111827; font-weight: 500; }
+
+    .schedule-box p {
+        background: #fff;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px dashed #d1d5db;
+        color: #4b5563;
+        font-size: 0.9rem;
+        text-align: center;
     }
-    
-    .info-row {
+
+    .price-box {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 10px 0;
-        border-bottom: 1px solid #e5e7eb;
+        background: #ecfdf5;
+        padding: 12px;
+        border-radius: 8px;
+        color: #065f46;
     }
-    
-    .info-row:last-child {
-        border-bottom: none;
+
+    .price-amount {
+        font-weight: 700;
+        font-size: 1.1rem;
     }
-    
-    .info-row label {
-        color: #4b5563;
-        font-weight: 500;
+
+    /* ACTIONS */
+    .detail-actions-sticky {
         display: flex;
-        align-items: center;
-        gap: 8px;
+        gap: 12px;
+        margin-top: 10px;
     }
-    
-    .info-row span {
-        color: #1f2937;
+
+    .btn-secondary-action, .btn-primary-action {
+        padding: 12px;
+        border-radius: 10px;
         font-weight: 600;
-    }
-    
-    .consultation-price {
-        color: #10b981 !important;
-        font-size: 1.2rem;
-    }
-    
-    .schedule-display {
-        color: #4b5563;
-        line-height: 1.6;
-        white-space: pre-wrap;
-        font-family: 'Inter', sans-serif;
-        margin: 0;
-    }
-    
-    .expertise-tags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-    }
-    
-    .expertise-tag {
-        background: #e0f2fe;
-        color: #0369a1;
-        padding: 8px 15px;
-        border-radius: 20px;
-        font-size: 0.9rem;
-        font-weight: 500;
-    }
-    
-    .detail-actions {
-        display: flex;
-        gap: 15px;
-    }
-    
-    .btn-close {
+        cursor: pointer;
+        border: none;
         flex: 1;
+        font-family: inherit;
+        transition: transform 0.2s;
+    }
+
+    .btn-secondary-action {
         background: #f3f4f6;
         color: #374151;
-        border: 2px solid #e5e7eb;
-        padding: 12px 20px;
-        border-radius: 10px;
-        font-size: 1rem;
-        font-weight: 600;
-        cursor: pointer;
+    }
+
+    .btn-primary-action {
+        background: #10b981;
+        color: white;
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 8px;
-        transition: all 0.3s;
     }
-    
-    .btn-close:hover {
-        background: #e5e7eb;
-    }
-    
-    .btn-consult-large {
-        flex: 2;
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        color: white;
-        border: none;
-        padding: 12px 20px;
-        border-radius: 10px;
-        font-size: 1rem;
-        font-weight: 600;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        transition: all 0.3s;
-    }
-    
-    .btn-consult-large:hover {
+
+    .btn-primary-action:hover {
+        background: #059669;
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
     }
     
+    /* Loading/Error States */
     .loading-state, .error-state {
         text-align: center;
         padding: 40px 20px;
     }
-    
-    .loading-state i {
-        color: #10b981;
-        margin-bottom: 20px;
-    }
-    
-    .error-state i {
-        color: #ef4444;
-        margin-bottom: 20px;
-    }
-    
-    .error-state h4 {
-        color: #1f2937;
-        margin-bottom: 10px;
-    }
-    
-    .error-state p {
-        color: #6b7280;
-        margin-bottom: 20px;
-    }
-    
-    .btn-retry {
-        background: #10b981;
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        border-radius: 10px;
-        font-size: 1rem;
-        font-weight: 600;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-    }
+    .loading-state i { color: #10b981; margin-bottom: 20px; }
+    .error-state i { color: #ef4444; margin-bottom: 20px; }
 `;
 document.head.appendChild(animationStyles);
 

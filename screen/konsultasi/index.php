@@ -207,9 +207,7 @@ $total_dokters = mysqli_num_rows($result);
 
                             <!-- Actions -->
                             <div class="doctor-actions">
-                                <button class="btn-detail" onclick="showDoctorDetail(<?php echo $dokter['id_dokter']; ?>)">
-                                    <i class="fas fa-info-circle"></i> Detail
-                                </button>
+
                                 <?php if (!empty($dokter['nomor_telepon'])): ?>
                                     <button class="btn-consult" 
                                             onclick="startWhatsAppConsult('<?php echo htmlspecialchars($dokter['nama_dokter']); ?>', '<?php echo htmlspecialchars($dokter['nomor_telepon']); ?>')">
@@ -330,6 +328,30 @@ $total_dokters = mysqli_num_rows($result);
     </div>
 
     <script src="script.js"></script>
+    <script>
+    // Auto-trigger doctor detail if consult_id is present
+    <?php if (isset($_GET['consult_id'])): 
+        $cid = (int)$_GET['consult_id'];
+    ?>
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+            showDoctorDetail(<?php echo $cid; ?>);
+        }, 500);
+    });
+    <?php endif; ?>
+    // Auto-trigger WhatsApp consultation if wa_id is present
+    <?php if (isset($_GET['wa_id'])): 
+        $wid = (int)$_GET['wa_id'];
+        $w_query = mysqli_query($conn, "SELECT nama_dokter, nomor_telepon FROM dokter WHERE id_dokter = $wid");
+        if ($w_row = mysqli_fetch_assoc($w_query)):
+    ?>
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+            startWhatsAppConsult('<?php echo addslashes($w_row['nama_dokter']); ?>', '<?php echo $w_row['nomor_telepon']; ?>');
+        }, 500);
+    });
+    <?php endif; endif; ?>
+    </script>
 </body>
 </html>
 

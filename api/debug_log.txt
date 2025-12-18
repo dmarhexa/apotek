@@ -1,0 +1,160 @@
+Request ID: 3
+Request ID: 3
+Found Doctor: Array
+(
+    [id_dokter] => 3
+    [nama_dokter] => Ahmad Setiawan
+    [spesialisasi] => Lainnya
+    [pengalaman] => 10
+    [nomor_telepon] => 081234567890
+    [email] => ahmad.setiawan@email.com
+    [jadwal_praktek] => Senin-Jumat: 08:00 - 16:00
+Sabtu: 08:00 - 12:00
+    [foto] => 1765009619_6933e8d329f9b_dokter2.jpg
+    [biaya_konsultasi] => 150000.00
+    [created_at] => 2025-12-06 13:30:28
+)
+
+Request ID: 3
+Found Doctor: Array
+(
+    [id_dokter] => 3
+    [nama_dokter] => Ahmad Setiawan
+    [spesialisasi] => Lainnya
+    [pengalaman] => 10
+    [nomor_telepon] => 081234567890
+    [email] => ahmad.setiawan@email.com
+    [jadwal_praktek] => Senin-Jumat: 08:00 - 16:00
+Sabtu: 08:00 - 12:00
+    [foto] => 1765009619_6933e8d329f9b_dokter2.jpg
+    [biaya_konsultasi] => 150000.00
+    [created_at] => 2025-12-06 13:30:28
+)
+
+Request ID: 3
+Found Doctor: Array
+(
+    [id_dokter] => 3
+    [nama_dokter] => Ahmad Setiawan
+    [spesialisasi] => Lainnya
+    [pengalaman] => 10
+    [nomor_telepon] => 081234567890
+    [email] => ahmad.setiawan@email.com
+    [jadwal_praktek] => Senin-Jumat: 08:00 - 16:00
+Sabtu: 08:00 - 12:00
+    [foto] => 1765009619_6933e8d329f9b_dokter2.jpg
+    [biaya_konsultasi] => 150000.00
+    [created_at] => 2025-12-06 13:30:28
+)
+
+Request ID: 3
+Found Doctor: Array
+(
+    [id_dokter] => 3
+    [nama_dokter] => Ahmad Setiawan
+    [spesialisasi] => Lainnya
+    [pengalaman] => 10
+    [nomor_telepon] => 081234567890
+    [email] => ahmad.setiawan@email.com
+    [jadwal_praktek] => Senin-Jumat: 08:00 - 16:00
+Sabtu: 08:00 - 12:00
+    [foto] => 1765009619_6933e8d329f9b_dokter2.jpg
+    [biaya_konsultasi] => 150000.00
+    [created_at] => 2025-12-06 13:30:28
+)
+
+Request ID: 3
+Found Doctor: Array
+(
+    [id_dokter] => 3
+    [nama_dokter] => Ahmad Setiawan
+    [spesialisasi] => Lainnya
+    [pengalaman] => 10
+    [nomor_telepon] => 081234567890
+    [email] => ahmad.setiawan@email.com
+    [jadwal_praktek] => Senin-Jumat: 08:00 - 16:00
+Sabtu: 08:00 - 12:00
+    [foto] => 1765009619_6933e8d329f9b_dokter2.jpg
+    [biaya_konsultasi] => 150000.00
+    [created_at] => 2025-12-06 13:30:28
+)
+
+Request ID: 8
+Found Doctor: Array
+(
+    [id_dokter] => 8
+    [nama_dokter] => Dokter Lazima
+    [spesialisasi] => Dokter Bedah
+    [pengalaman] => 10
+    [nomor_telepon] => 0852698230914
+    [email] => lazima@gmail.com
+    [jadwal_praktek] => tidak ada praktek angjayy
+    [foto] => 1765005881_6933da3990e72_dokter3.jpg
+    [biaya_konsultasi] => 100000.00
+    [created_at] => 2025-12-06 14:24:41
+)
+
+Request ID: 3
+Found Doctor: Array
+(
+    [id_dokter] => 3
+    [nama_dokter] => Ahmad Setiawan
+    [spesialisasi] => Lainnya
+    [pengalaman] => 10
+    [nomor_telepon] => 081234567890
+    [email] => ahmad.setiawan@email.com
+    [jadwal_praktek] => Senin-Jumat: 08:00 - 16:00
+Sabtu: 08:00 - 12:00
+    [foto] => 1765009619_6933e8d329f9b_dokter2.jpg
+    [biaya_konsultasi] => 150000.00
+    [created_at] => 2025-12-06 13:30:28
+)
+
+Request ID: 6
+Found Doctor: Array
+(
+    [id_dokter] => 6
+    [nama_dokter] => Dodi Pratama
+    [spesialisasi] => Lainnya
+    [pengalaman] => 20
+    [nomor_telepon] => 081456789012
+    [email] => dodi.pratama@email.com
+    [jadwal_praktek] => Rabu-Jumat: 08:00 - 16:00
+Sabtu: 08:00 - 12:00
+    [foto] => 1765045072_6934735018848_dokter2.webp
+    [biaya_konsultasi] => 300000.00
+    [created_at] => 2025-12-06 13:30:28
+)
+
+Request ID: 3
+Found Doctor: Array
+(
+    [id_dokter] => 3
+    [nama_dokter] => Ahmad Setiawan
+    [spesialisasi] => Lainnya
+    [pengalaman] => 10
+    [nomor_telepon] => 081234567890
+    [email] => ahmad.setiawan@email.com
+    [jadwal_praktek] => Senin-Jumat: 08:00 - 16:00
+Sabtu: 08:00 - 12:00
+    [foto] => 1765009619_6933e8d329f9b_dokter2.jpg
+    [biaya_konsultasi] => 150000.00
+    [created_at] => 2025-12-06 13:30:28
+)
+
+Request ID: 3
+Found Doctor: Array
+(
+    [id_dokter] => 3
+    [nama_dokter] => Ahmad Setiawan
+    [spesialisasi] => Lainnya
+    [pengalaman] => 10
+    [nomor_telepon] => 081234567890
+    [email] => ahmad.setiawan@email.com
+    [jadwal_praktek] => Senin-Jumat: 08:00 - 16:00
+Sabtu: 08:00 - 12:00
+    [foto] => 1765009619_6933e8d329f9b_dokter2.jpg
+    [biaya_konsultasi] => 150000.00
+    [created_at] => 2025-12-06 13:30:28
+)
+
