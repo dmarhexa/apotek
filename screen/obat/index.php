@@ -492,11 +492,11 @@ function safeOutput($string)
                                         </div>
                                     </div>
                                     <div class="action-buttons">
-                                        <button class="btn-detail"
+                                        <!-- <button class="btn-detail"
                                             onclick="showProductDetail(<?php echo $obat['id_obat']; ?>)">
                                             <i class="fas fa-info-circle"></i>
                                             Detail
-                                        </button>
+                                        </button> -->
                                         <?php if ($userRole !== 'admin'): ?>
                                         <!-- Tombol Beli hanya untuk non-admin -->
                                         <button class="btn-buy <?php echo $obat['stok'] == 0 ? 'disabled' : ''; ?>"

@@ -161,9 +161,9 @@ $result = mysqli_stmt_get_result($stmt);
                                 
                                 <div class="action-area">
                                     <!-- Placeholder detail link -->
-                                    <button class="btn-view" onclick="alert('Fitur detail sedang dalam pengembangan')">
+                                    <!-- <button class="btn-view" onclick="alert('Fitur detail sedang dalam pengembangan')">
                                         <i class="fas fa-eye"></i> Lihat Detail
-                                    </button>
+                                    </button> -->
                                 </div>
                             </div>
                         </div>

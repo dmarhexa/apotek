@@ -1114,7 +1114,7 @@ $stok_kritis = $result_kritis ? mysqli_fetch_assoc($result_kritis)['total'] : 0;
                     <div style="margin-top: 30px;">Mengetahui,</div>
                     <div style="margin-top: 5px;">Kepala Apotek Sehat</div>
                     <div class="signature-line"></div>
-                    <div style="margin-top: 5px; font-weight: bold;">[Nama Lengkap]</div>
+                    <div style="margin-top: 5px; font-weight: bold;">[Salsabila]</div>
                 </div>
             </div>
         </div>
